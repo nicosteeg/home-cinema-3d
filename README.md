@@ -7,7 +7,7 @@ Modèle 3D interactif WebGL à l'échelle du séjour home cinema (37 m², HSP 3,
 ## Configuration AV modélisée (Dolby Atmos 5.1.2 + Vidéoprojection 4K Laser)
 
 - **Centrale** : Focal 300 IWLCR6 encastrée horizontalement (axe à 0,70 m, sous la barre d'écran à 86 cm)
-- **FR** : Focal Dôme Flax murale dans l'angle Nord-Ouest (1,50 m)
+- **FR** : Focal Dôme Flax murale à 1,50 m du sol et 75 cm du mur Nord (cône acoustique dégagé du poêle)
 - **FL** : Focal Dôme Flax suspendue au plafond dans l'angle vitré Sud-Ouest (hauteur réglable en direct)
 - **SR & SL** : Focal 300 ICW6 encastrées à 1,30 m dans le doublage de 12 cm devant les poteaux béton
 - **TR & TL** : 2 enceintes Atmos encastrées au plafond (3,02 m)

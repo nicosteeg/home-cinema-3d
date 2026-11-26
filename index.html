@@ -301,12 +301,12 @@
       model: 'Focal Dôme Flax (murale)',
       colorHex: '#0ea5e9',
       colorRGB: [0.06, 0.65, 0.91],
-      pos: [0.14, 1.50, 0.22],
+      pos: [0.14, 1.50, 0.75],
       aim: MLP,
       dims: '172 × 144 × 143 mm (satellite)',
-      heightLabel: '1,50 m du sol séjour',
+      heightLabel: '1,50 m du sol · 75 cm du mur Nord',
       targetAz: '-22° à -30°',
-      note: 'Accrochée au mur dans l\'angle Nord-Ouest à 1,50 m du sol et orientée vers le point d\'écoute. Angle horizontal quasi idéal (-28,5°).'
+      note: 'Décalée à 75 cm du mur Nord (vers l\'écran) à 1,50 m du sol afin de dégager totalement son cône acoustique du volume du poêle (prof. 70 cm), tout en restant à 40 cm du bord de toile (22 cm de la réservation écran) et dans l\'angle idéal Dolby (-23,2°).'
     },
     {
       id: 'fl',
@@ -1331,8 +1331,11 @@
       addHeightCote(0.25, 4.25, 0.86, dimCol, 'z');
       // Centrale 0.70 m height from floor
       addHeightCote(0.05, 2.43, 0.70, [0.96, 0.62, 0.04, 0.88], 'z');
-      // FR 1.50 m height from floor & FL floor-clearance vertical guide
-      addHeightCote(0.14, 0.22, 1.50, [0.06, 0.65, 0.91, 0.88], 'z');
+      // FR 1.50 m height from floor + 75 cm horizontal offset from North wall
+      addHeightCote(0.14, 0.75, 1.50, [0.06, 0.65, 0.91, 0.88], 'z');
+      op.addEdge([0.05, 1.50, 0.01], [0.05, 1.50, 0.75], [0.06, 0.65, 0.91, 0.88]);
+      op.addEdge([0.05, 1.43, 0.01], [0.05, 1.57, 0.01], [0.06, 0.65, 0.91, 0.88]);
+      op.addEdge([0.05, 1.43, 0.75], [0.05, 1.57, 0.75], [0.06, 0.65, 0.91, 0.88]);
       op.addEdge([0.28, 0.0, 6.95], [0.28, state.flHeight, 6.95], [0.01, 0.52, 0.78, 0.45]);
       // SR & SL 1.30 m height verticals (measured from séjour floor Y = 0!)
       addHeightCote(5.11, 0.05, 1.30, [0.96, 0.25, 0.37, 0.88], 'x');
@@ -1622,7 +1625,8 @@
     { id: 'd_scr86',      pos: [0.25, 0.36, 4.30], text: 'Bas écran 86 cm' },
     { id: 'd_step',       pos: [5.24, 0.28, 6.08], text: 'Marche +52 cm' },
     { id: 'd_h_centrale', pos: [0.06, 0.34, 2.43], text: '↕ 0,70 m', color: '#f59e0b' },
-    { id: 'd_h_fr',       pos: [0.16, 0.52, 0.24], text: '↕ 1,50 m', color: '#0ea5e9' },
+    { id: 'd_h_fr',       pos: [0.16, 0.62, 0.75], text: '↕ 1,50 m', color: '#0ea5e9' },
+    { id: 'd_z_fr',       pos: [0.08, 1.66, 0.375], text: '↔ 75 cm', color: '#0ea5e9' },
     { id: 'd_h_sr',       pos: [5.11, 0.88, 0.08], text: '↕ 1,30 m', color: '#f43f5e' },
     { id: 'd_h_sl',       pos: [5.11, 0.88, zSouth(5.11)-0.08], text: '↕ 1,30 m', color: '#e11d48' }
   ];
