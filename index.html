@@ -1,0 +1,2095 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Modèle 3D — Pièce de vie Home Cinema (Dolby Atmos 5.1.2)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root {
+      --background: #0f1117;
+      --card: #161922;
+      --border: #2a2f3d;
+      --foreground: #eceef2;
+      --muted-foreground: #969fae;
+      --primary: #3b82f6;
+      --primary-foreground: #ffffff;
+      --secondary: #222736;
+      --secondary-foreground: #e2e6ef;
+    }
+    :root.light {
+      --background: #f5f6f8;
+      --card: #ffffff;
+      --border: #d8dde6;
+      --foreground: #141821;
+      --muted-foreground: #5a6475;
+      --primary: #2563eb;
+      --primary-foreground: #ffffff;
+      --secondary: #e8ecf3;
+      --secondary-foreground: #141821;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-size: 14px;
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    #viewport-wrap {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      cursor: grab;
+    }
+    #viewport-wrap:active { cursor: grabbing; }
+    #gl-canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+    #labels-layer {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      overflow: hidden;
+    }
+    .pin-3d {
+      position: absolute;
+      transform: translate(-50%, -100%);
+      pointer-events: auto;
+      cursor: pointer;
+      transition: transform 0.14s ease, opacity 0.15s ease;
+      white-space: nowrap;
+      z-index: 10;
+    }
+    .pin-3d:hover {
+      transform: translate(-50%, -108%) scale(1.07);
+      z-index: 30;
+    }
+    .pin-3d.active {
+      transform: translate(-50%, -112%) scale(1.12);
+      z-index: 40;
+    }
+    .dim-3d {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      white-space: nowrap;
+      z-index: 5;
+      background: color-mix(in srgb, var(--card) 88%, transparent);
+    }
+    .hud-glass {
+      background: color-mix(in srgb, var(--card) 92%, transparent);
+    }
+    .scroll-thin::-webkit-scrollbar { width: 5px; height: 5px; }
+    .scroll-thin::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 999px;
+    }
+    .scroll-thin::-webkit-scrollbar-track { background: transparent; }
+  </style>
+</head>
+<body class="bg-[var(--background)] text-[var(--foreground)] antialiased flex flex-col h-full w-full">
+
+  <!-- Top Header Bar -->
+  <header class="shrink-0 flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-[var(--card)] border-b border-[var(--border)] text-xs">
+    <div class="flex items-center gap-2.5 min-w-0">
+      <div class="w-2.5 h-2.5 rounded-full bg-[var(--primary)] shrink-0"></div>
+      <div class="min-w-0">
+        <div class="font-semibold text-sm leading-tight truncate">Pièce de vie Home Cinema — Modèle 3D à l'échelle</div>
+        <div class="text-xs text-[var(--muted-foreground)] truncate">Séjour 37 m² (HSP 3,02 m) · Cuisine / SàM 35,4 m² (+0,52 m) · Dolby Atmos 5.1.2 · Sony VPL-XW6100</div>
+      </div>
+    </div>
+
+    <!-- Camera Presets -->
+    <div class="flex items-center gap-1 flex-wrap" id="camera-presets">
+      <button data-preset="overview" class="cam-btn px-2 py-1 rounded border border-[var(--border)] bg-[var(--primary)] text-[var(--primary-foreground)] font-medium transition">Vue 3/4</button>
+      <button data-preset="mlp" class="cam-btn px-2 py-1 rounded border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--secondary)] transition">Point d'écoute</button>
+      <button data-preset="section" class="cam-btn px-2 py-1 rounded border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--secondary)] transition">Coupe</button>
+      <button data-preset="top" class="cam-btn px-2 py-1 rounded border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--secondary)] transition">Plan (dessus)</button>
+      <button data-preset="front" class="cam-btn px-2 py-1 rounded border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--secondary)] transition">Scène frontale</button>
+      <button data-preset="surrounds" class="cam-btn px-2 py-1 rounded border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--secondary)] transition">Surrounds 12 cm</button>
+      <button data-preset="rear" class="cam-btn px-2 py-1 rounded border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--secondary)] transition">Banquette &amp; Proj.</button>
+      <button id="btn-export-obj" title="Télécharger le maillage 3D au format Wavefront .OBJ (importable dans Blender, SketchUp, Sweet Home 3D)" class="ml-1 px-2 py-1 rounded border border-[var(--border)] bg-[var(--secondary)] text-[var(--secondary-foreground)] hover:opacity-90 font-medium transition">Exporter .OBJ</button>
+      <button id="btn-theme-toggle" title="Basculer thème clair / sombre" class="px-2 py-1 rounded border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--secondary)] font-medium transition">☀ Clair</button>
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <div class="flex-1 flex min-h-0 overflow-hidden relative">
+
+    <!-- 3D Viewport -->
+    <main id="viewport-wrap" class="flex-1 min-w-0 relative">
+      <canvas id="gl-canvas"></canvas>
+      <div id="labels-layer"></div>
+
+      <!-- Floating Bottom-Left Controls Overlay -->
+      <div class="absolute bottom-3 left-3 z-20 flex flex-col gap-1.5 max-w-[calc(100%-24px)] pointer-events-none">
+        <div class="pointer-events-auto hud-glass flex flex-wrap items-center gap-1.5 px-2.5 py-1.5 rounded-lg backdrop-blur border border-[var(--border)] shadow-sm text-xs">
+          <label class="flex items-center gap-1.5 cursor-pointer select-none pr-1">
+            <input id="opt-xray" type="checkbox" class="accent-[var(--primary)]" />
+            <span>Rayons X</span>
+          </label>
+          <span class="text-[var(--border)]">|</span>
+          <label class="flex items-center gap-1.5 cursor-pointer select-none pr-1">
+            <input id="opt-cutsouth" type="checkbox" class="accent-[var(--primary)]" />
+            <span>Masquer mur Sud</span>
+          </label>
+          <span class="text-[var(--border)]">|</span>
+          <label class="flex items-center gap-1.5 cursor-pointer select-none pr-1">
+            <input id="opt-ceiling" type="checkbox" class="accent-[var(--primary)]" />
+            <span>Plafond</span>
+          </label>
+          <span class="text-[var(--border)]">|</span>
+          <label class="flex items-center gap-1.5 cursor-pointer select-none pr-1">
+            <input id="opt-cones" type="checkbox" checked class="accent-[var(--primary)]" />
+            <span>Cônes audio</span>
+          </label>
+          <span class="text-[var(--border)]">|</span>
+          <label class="flex items-center gap-1.5 cursor-pointer select-none pr-1">
+            <input id="opt-beam" type="checkbox" checked class="accent-[var(--primary)]" />
+            <span>Faisceau proj.</span>
+          </label>
+          <span class="text-[var(--border)]">|</span>
+          <label class="flex items-center gap-1.5 cursor-pointer select-none pr-1">
+            <input id="opt-screen" type="checkbox" checked class="accent-[var(--primary)]" />
+            <span>Écran</span>
+          </label>
+          <span class="text-[var(--border)]">|</span>
+          <label class="flex items-center gap-1.5 cursor-pointer select-none pr-1">
+            <input id="opt-labels" type="checkbox" checked class="accent-[var(--primary)]" />
+            <span>Repères</span>
+          </label>
+          <span class="text-[var(--border)]">|</span>
+          <label class="flex items-center gap-1.5 cursor-pointer select-none">
+            <input id="opt-viewer" type="checkbox" checked class="accent-[var(--primary)]" />
+            <span>Spectateurs</span>
+          </label>
+        </div>
+
+        <div class="pointer-events-auto hud-glass inline-flex items-center gap-2 px-2.5 py-1 rounded-md backdrop-blur border border-[var(--border)] text-xs text-[var(--muted-foreground)] w-fit">
+          <span>Glisser : pivoter</span>
+          <span>·</span>
+          <span>Clic droit / Shift+glisser : déplacer</span>
+          <span>·</span>
+          <span>Molette : zoomer</span>
+          <span>·</span>
+          <span>Cliquer sur un repère : inspecter</span>
+        </div>
+      </div>
+
+      <!-- Mobile/Compact Side Panel Toggle -->
+      <button id="btn-toggle-sidebar" class="hud-glass absolute top-3 right-3 z-20 px-2.5 py-1 rounded-md border border-[var(--border)] text-xs font-medium hover:bg-[var(--secondary)] shadow-sm">
+        Panneau AV
+      </button>
+    </main>
+
+    <!-- Right Inspector Sidebar -->
+    <aside id="sidebar" class="w-80 shrink-0 bg-[var(--card)] border-l border-[var(--border)] flex flex-col min-h-0 overflow-hidden transition-all">
+      <!-- Subwoofer & FL Suspension Controls -->
+      <div class="p-3 border-b border-[var(--border)] space-y-2.5">
+        <div class="space-y-1.5">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">Encastrement caisson SVS 2000</span>
+          </div>
+          <select id="sel-sub-pos" class="w-full text-xs px-2 py-1.5 rounded border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] focus:outline-none">
+            <option value="rear_bench_north" selected>Sous banquette bois (arrière canapé, côté Nord)</option>
+            <option value="rear_bench">Sous banquette bois (arrière canapé, côté Sud)</option>
+            <option value="north_bench">Sous banquette bois (mur Nord, cheminée)</option>
+            <option value="plan_orig">Position plan initial (côté cheminée)</option>
+          </select>
+          <p id="sub-pos-note" class="text-xs text-[var(--muted-foreground)] leading-snug">
+            Niche intégrée à l'extrémité Nord du meuble bois derrière le canapé (prof. 50 cm), ouverte vers le Nord / angle fenêtre M 07.
+          </p>
+        </div>
+
+        <div class="pt-2 border-t border-[var(--border)] space-y-1">
+          <div class="flex items-center justify-between gap-2 text-xs">
+            <span class="font-semibold uppercase tracking-wide text-[var(--muted-foreground)] whitespace-nowrap">Suspension FL</span>
+            <span id="fl-height-readout" class="font-mono font-medium whitespace-nowrap">2,20 m · tige 82 cm</span>
+          </div>
+          <input id="rng-fl-height" type="range" min="1.50" max="2.88" step="0.05" value="2.20" class="w-full accent-[var(--primary)] cursor-pointer" />
+        </div>
+      </div>
+
+      <!-- Selected Equipment Inspector -->
+      <div id="inspector-card" class="p-3 border-b border-[var(--border)] bg-[var(--background)] space-y-2">
+        <div class="flex items-start justify-between gap-2">
+          <div class="flex items-center gap-2 min-w-0">
+            <span id="insp-dot" class="w-3 h-3 rounded-full shrink-0"></span>
+            <div class="min-w-0">
+              <div id="insp-title" class="text-sm font-semibold truncate">Sélectionnez un équipement</div>
+              <div id="insp-model" class="text-xs text-[var(--muted-foreground)] truncate">Cliquez dans la scène 3D ou la liste</div>
+            </div>
+          </div>
+          <button id="btn-focus-selected" class="hidden shrink-0 px-2 py-0.5 rounded border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--secondary)] text-xs">Centrer</button>
+        </div>
+        <div id="insp-metrics" class="grid grid-cols-2 gap-1.5 text-xs"></div>
+        <div id="insp-note" class="text-xs text-[var(--muted-foreground)] leading-relaxed"></div>
+      </div>
+
+      <!-- Equipment List -->
+      <div class="flex-1 overflow-y-auto scroll-thin p-2.5 space-y-1.5">
+        <div class="px-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">Équipements Home Cinema (9)</div>
+        <div id="equipment-list" class="space-y-1"></div>
+
+        <!-- Architectural & Optical Summary -->
+        <div class="mt-3 pt-2.5 border-t border-[var(--border)] px-1 space-y-1.5 text-xs">
+          <div class="font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">Vérifications clés</div>
+          <div class="p-2 rounded bg-[var(--background)] border border-[var(--border)] space-y-1">
+            <div class="flex justify-between"><span class="text-[var(--muted-foreground)]">Écran 16:9 projeté</span><span class="font-mono font-medium">2,90 × 1,63 m (131")</span></div>
+            <div class="flex justify-between"><span class="text-[var(--muted-foreground)]">Bas barre / bas image</span><span class="font-mono font-medium">0,86 m / 0,945 m</span></div>
+            <div class="flex justify-between"><span class="text-[var(--muted-foreground)]">Distance projection</span><span class="font-mono font-medium">5,00 m (ratio 1,72:1)</span></div>
+            <div class="flex justify-between"><span class="text-[var(--muted-foreground)]">Lens Shift Sony V</span><span class="font-mono font-medium">+19 % (max ±85 %)</span></div>
+            <div class="flex justify-between"><span class="text-[var(--muted-foreground)]">Caisson proj. (L × H)</span><span class="font-mono font-medium">60 cm × base 82 cm</span></div>
+            <div class="flex justify-between"><span class="text-[var(--muted-foreground)]">Doublage SR / SL</span><span class="font-mono font-medium">12 cm (encastr. 10,5 cm)</span></div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+<script>
+(() => {
+  'use strict';
+
+  // =========================================================================
+  // 1. EXACT ARCHITECTURAL DATA & COORDINATE SYSTEM (in meters)
+  //    X: West (0, screen/terrace wall) -> East (+10.85, kitchen wall)
+  //    Y: Floor séjour (+18.90 -> 0.00) -> Ceiling (+3.02 m)
+  //       Dining/Kitchen floor (+19.42 -> +0.52 m)
+  //    Z: North (0, fireplace/SR wall) -> South (angled wall: Z = 7.282 - 0.10976 * X)
+  //       Exact collinear fit across ALL 6 South pillars S0..S5 (residual < 4 mm)
+  // =========================================================================
+  const CEIL_Y = 3.02;
+  const DINING_Y = 0.52;
+  const STEP_Y = 0.18;
+  const SOUTH_Z0 = 7.282;
+  const SOUTH_SLOPE = -0.10976; // tan(-6.263 deg)
+  const SOUTH_ANGLE = Math.atan(SOUTH_SLOPE); // radians (~ -0.1093 rad)
+  const zSouth = (x) => SOUTH_Z0 + SOUTH_SLOPE * x;
+
+  // Main Listening Position (center of sofa, seated ear height ~1.08 m above séjour floor)
+  const MLP = [4.65, 1.08, 2.68];
+
+  // Equipment definitions (exact real dimensions in meters)
+  const EQUIPMENT_BASE = [
+    {
+      id: 'centrale',
+      short: 'Centrale',
+      name: 'Voie Centrale',
+      model: 'Focal 300 IWLCR6 (encastrée)',
+      colorHex: '#f59e0b',
+      colorRGB: [0.96, 0.62, 0.04],
+      pos: [0.00, 0.70, 2.43], // horizontally mounted under 86cm screen bottom bar
+      aim: MLP,
+      dims: '600 × 220 × 98 mm (encastr. 93 mm)',
+      heightLabel: '0,70 m (bord sup. 0,81 m < 0,86 m)',
+      targetAz: '0°',
+      note: 'Montée horizontalement dans le mur Ouest plein juste avant la baie M 06, sous le bord inférieur de l\'écran (86 cm). Tweeter & médium orientables vers le canapé.'
+    },
+    {
+      id: 'fr',
+      short: 'FR',
+      name: 'Frontale Droite (FR)',
+      model: 'Focal Dôme Flax (murale)',
+      colorHex: '#0ea5e9',
+      colorRGB: [0.06, 0.65, 0.91],
+      pos: [0.14, 1.50, 0.22],
+      aim: MLP,
+      dims: '172 × 144 × 143 mm (satellite)',
+      heightLabel: '1,50 m du sol séjour',
+      targetAz: '-22° à -30°',
+      note: 'Accrochée au mur dans l\'angle Nord-Ouest à 1,50 m du sol et orientée vers le point d\'écoute. Angle horizontal quasi idéal (-28,5°).'
+    },
+    {
+      id: 'fl',
+      short: 'FL',
+      name: 'Frontale Gauche (FL)',
+      model: 'Focal Dôme Flax (suspendue plafond)',
+      colorHex: '#0284c7',
+      colorRGB: [0.01, 0.52, 0.78],
+      pos: [0.28, 2.20, 6.95], // updated dynamically by state.flHeight
+      aim: MLP,
+      dims: '172 × 144 × 143 mm (suspension plafond)',
+      heightLabel: '2,20 m (suspendue à 82 cm du plafond)',
+      targetAz: '+22° à +30°',
+      note: 'Le pilier Sud-Ouest étant entièrement à l\'extérieur de l\'angle vitré M 06 / M 05, FL est suspendue au plafond dans le coin intérieur (en retrait des rails rideaux) et inclinée vers le point d\'écoute. Hauteur réglable via le curseur.'
+    },
+    {
+      id: 'sub',
+      short: 'Sub',
+      name: 'Caisson de basses (LFE)',
+      model: 'SVS 2000 (SB-2000 / Pro)',
+      colorHex: '#8b5cf6',
+      colorRGB: [0.55, 0.36, 0.96],
+      pos: [5.49, 0.71, 5.05], // updated dynamically by subMode
+      aim: [2.5, 0.5, 4.5],
+      dims: '361 L × 371 H × 391 P mm (12")',
+      heightLabel: 'Encastré sous banquette bois',
+      targetAz: 'Omnidirectionnel',
+      note: 'Encastré dans une niche dédiée sous la banquette en bois (prévoir ~4 cm de jeu périphérique, découplage type SVS SoundPath et façade acoustiquement ouverte).'
+    },
+    {
+      id: 'tr',
+      short: 'TR',
+      name: 'Atmos Plafond Droite (TR)',
+      model: 'Enceinte plafond Atmos (encastrée)',
+      colorHex: '#10b981',
+      colorRGB: [0.06, 0.73, 0.51],
+      pos: [4.24, CEIL_Y - 0.01, 1.42],
+      aim: [4.55, 1.08, 2.35],
+      dims: 'Ø 244 mm (encastrée plafond)',
+      heightLabel: '3,02 m (plafond séjour)',
+      targetAz: 'Élévation 45°–65°',
+      note: 'Encastrée au plafond devant l\'assise du canapé (entraxe ~2,65–2,70 m avec TL). Élévation ~55° conforme aux recommandations Dolby Atmos Top Middle/Front.'
+    },
+    {
+      id: 'tl',
+      short: 'TL',
+      name: 'Atmos Plafond Gauche (TL)',
+      model: 'Enceinte plafond Atmos (encastrée)',
+      colorHex: '#059669',
+      colorRGB: [0.02, 0.59, 0.41],
+      pos: [4.24, CEIL_Y - 0.01, 4.04],
+      aim: [4.55, 1.08, 3.00],
+      dims: 'Ø 244 mm (encastrée plafond)',
+      heightLabel: '3,02 m (plafond séjour)',
+      targetAz: 'Élévation 45°–65°',
+      note: 'Symétrique de TR par rapport à l\'axe de l\'écran (Z = 2,68 m). Positionnée à ~4,0 m de l\'écran, juste à l\'aplomb de l\'avant du canapé.'
+    },
+    {
+      id: 'sr',
+      short: 'SR',
+      name: 'Surround Droite (SR)',
+      model: 'Focal 300 ICW6 (encastrée mur 12 cm)',
+      colorHex: '#f43f5e',
+      colorRGB: [0.96, 0.25, 0.37],
+      pos: [5.11, 1.30, 0.00],
+      aim: MLP,
+      dims: 'Ø 244 mm × prof. 105 mm (découpe Ø 216)',
+      heightLabel: '1,30 m du sol séjour',
+      targetAz: '-90° à -110°',
+      note: 'Encastrée dans le doublage fin de 12 cm devant le poteau béton Nord (marge arrière serrée de ~1,5–2 cm !). Angle azimutal idéal (~ -100°) et hauteur 1,30 m bien dégagée au-dessus du dossier.'
+    },
+    {
+      id: 'sl',
+      short: 'SL',
+      name: 'Surround Gauche (SL)',
+      model: 'Focal 300 ICW6 (encastrée mur 12 cm)',
+      colorHex: '#e11d48',
+      colorRGB: [0.88, 0.11, 0.28],
+      pos: [5.11, 1.30, zSouth(5.11)],
+      aim: MLP,
+      dims: 'Ø 244 mm × prof. 105 mm (découpe Ø 216)',
+      heightLabel: '1,30 m du sol séjour',
+      targetAz: '+90° à +110°',
+      note: 'Encastrée dans le doublage de 12 cm devant le poteau béton Sud (mur biais à -6,26°). Marge arrière identique (~1,5–2 cm avant béton). Angle parfait (+96°), distance 4,07 m.'
+    },
+    {
+      id: 'proj',
+      short: 'Proj',
+      name: 'Vidéoprojecteur 4K Laser',
+      model: 'Sony VPL-XW6100 (BRAVIA Projector 8)',
+      colorHex: '#d946ef',
+      colorRGB: [0.85, 0.27, 0.94],
+      pos: [5.53, DINING_Y + 0.82 + 0.105, 2.69],
+      aim: [0.255, 1.76, 2.67],
+      dims: '460 L × 210 H × 517 P mm (dans caisson 60 cm)',
+      heightLabel: 'Posé à 82 cm (+0,52 m → base 1,34 m / axe 1,445 m)',
+      targetAz: 'Ratio 1,35–2,84:1',
+      note: 'Intégré et protégé dans le caisson bois élargi à 60 cm (ouvert à l\'avant, fermé dessus/arrière/côtés) à 82 cm au-dessus du niveau salle à manger. Objectif à 1,445 m du sol séjour : le faisceau bas passe à ~1,40 m au-dessus du canapé (+17 cm au-dessus des têtes !).'
+    }
+  ];
+
+  // Dynamic state
+  const state = {
+    selectedId: 'proj',
+    subMode: 'rear_bench_north', // 'rear_bench_north' | 'rear_bench' | 'north_bench' | 'plan_orig'
+    flHeight: 2.20,              // ceiling-suspended FL height above séjour floor (1.50..2.88 m)
+    xray: false,
+    cutSouth: false,
+    showCeiling: false,
+    showCones: true,
+    showBeam: true,
+    screenDown: true,
+    screenProgress: 1.0,
+    showLabels: true,
+    showViewer: true,
+    isLight: false
+  };
+
+  function getSubConfig() {
+    if (state.subMode === 'rear_bench_north') {
+      return {
+        pos: [5.49, DINING_Y + 0.19, 0.575], // recessed inside North end of wooden meuble behind sofa (Z = 0.30..0.85)
+        aim: [5.35, 0.71, -0.50],            // 12" driver facing North toward open corridor / M 07 corner
+        heightLabel: 'Encastré banquette bois Nord (base +0,52 m)',
+        note: 'Niche intégrée à l\'extrémité Nord du meuble bois derrière le canapé (prof. 50 cm), ouverte vers le Nord / angle fenêtre M 07. Libère totalement le passage côté Sud.'
+      };
+    }
+    if (state.subMode === 'rear_bench') {
+      return {
+        pos: [5.49, DINING_Y + 0.19, 5.05], // recessed inside South end of wooden banquette behind sofa (on +0.52 floor)
+        aim: [4.2, 0.65, 5.8],
+        heightLabel: 'Encastré banquette bois Sud (base +0,52 m)',
+        note: 'Niche intégrée dans le meuble/banquette bois (50 × 70 cm) derrière le canapé, ouverte côté passage Sud vers le séjour. Profondeur 50 cm suffisante pour le SVS 2000 (39,1 cm) + câbles.'
+      };
+    }
+    if (state.subMode === 'north_bench') {
+      return {
+        pos: [2.67, 0.20, 0.48], // recessed under wooden North-wall bench next to fireplace
+        aim: [2.67, 0.20, 2.68],
+        heightLabel: 'Encastré sous banquette bois mur Nord (H ~46 cm)',
+        note: 'Niche aménagée sous une banquette bois rehaussée (~46 cm) au mur Nord, à droite de la cheminée. Couplage frontal optimal avec la scène avant (attention à l\'isolation thermique côté foyer).'
+      };
+    }
+    return {
+      pos: [2.72, STEP_Y + 0.19, 0.46], // original plan "Bass" spot on concrete plinth
+      aim: [2.72, 0.37, 2.68],
+      heightLabel: 'Posé sur socle cheminée (+0,18 m)',
+      note: 'Emplacement « Bass » figurant sur le plan initial, posé à droite de la cheminée sur le socle béton (+18 cm).'
+    };
+  }
+
+  function getEquipmentList() {
+    return EQUIPMENT_BASE.map((item) => {
+      if (item.id === 'sub') {
+        const cfg = getSubConfig();
+        return { ...item, ...cfg };
+      }
+      if (item.id === 'fl') {
+        const dropCm = Math.round((CEIL_Y - state.flHeight) * 100);
+        return {
+          ...item,
+          pos: [0.28, state.flHeight, 6.95],
+          heightLabel: `${state.flHeight.toFixed(2).replace('.', ',')} m (tige plafond ${dropCm} cm)`
+        };
+      }
+      return item;
+    });
+  }
+
+  // =========================================================================
+  // 2. MINIMAL HIGH-PRECISION 3D MATH LIBRARY
+  // =========================================================================
+  const v3 = {
+    sub: (a, b) => [a[0]-b[0], a[1]-b[1], a[2]-b[2]],
+    add: (a, b) => [a[0]+b[0], a[1]+b[1], a[2]+b[2]],
+    scale: (a, s) => [a[0]*s, a[1]*s, a[2]*s],
+    dot: (a, b) => a[0]*b[0] + a[1]*b[1] + a[2]*b[2],
+    cross: (a, b) => [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]],
+    len: (a) => Math.hypot(a[0], a[1], a[2]),
+    norm: (a) => {
+      const l = Math.hypot(a[0], a[1], a[2]) || 1;
+      return [a[0]/l, a[1]/l, a[2]/l];
+    }
+  };
+
+  function mat4Identity() {
+    return new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]);
+  }
+  function mat4Mul(a, b) {
+    const out = new Float32Array(16);
+    for (let c = 0; c < 4; c++) {
+      for (let r = 0; r < 4; r++) {
+        out[c*4+r] = a[0*4+r]*b[c*4+0] + a[1*4+r]*b[c*4+1] + a[2*4+r]*b[c*4+2] + a[3*4+r]*b[c*4+3];
+      }
+    }
+    return out;
+  }
+  function mat4Perspective(fovy, aspect, near, far) {
+    const f = 1.0 / Math.tan(fovy / 2);
+    const nf = 1 / (near - far);
+    return new Float32Array([
+      f / aspect, 0, 0, 0,
+      0, f, 0, 0,
+      0, 0, (far + near) * nf, -1,
+      0, 0, 2 * far * near * nf, 0
+    ]);
+  }
+  function mat4LookAt(eye, target, up) {
+    const z = v3.norm(v3.sub(eye, target));
+    const x = v3.norm(v3.cross(up, z));
+    const y = v3.cross(z, x);
+    return new Float32Array([
+      x[0], y[0], z[0], 0,
+      x[1], y[1], z[1], 0,
+      x[2], y[2], z[2], 0,
+      -v3.dot(x, eye), -v3.dot(y, eye), -v3.dot(z, eye), 1
+    ]);
+  }
+  function projectPoint(p, mvp, w, h) {
+    const x = mvp[0]*p[0] + mvp[4]*p[1] + mvp[8]*p[2] + mvp[12];
+    const y = mvp[1]*p[0] + mvp[5]*p[1] + mvp[9]*p[2] + mvp[13];
+    const z = mvp[2]*p[0] + mvp[6]*p[1] + mvp[10]*p[2] + mvp[14];
+    const cw = mvp[3]*p[0] + mvp[7]*p[1] + mvp[11]*p[2] + mvp[15];
+    if (cw <= 0.05) return null;
+    const ndcX = x / cw, ndcY = y / cw, ndcZ = z / cw;
+    if (ndcZ < -1 || ndcZ > 1.05) return null;
+    return {
+      x: (ndcX * 0.5 + 0.5) * w,
+      y: (1 - (ndcY * 0.5 + 0.5)) * h,
+      depth: cw
+    };
+  }
+
+  // =========================================================================
+  // 3. MESH BUILDER (Opaque, Transparent, Architectural Edges, OBJ Export)
+  // =========================================================================
+  class MeshAccumulator {
+    constructor() {
+      this.pos = [];
+      this.nor = [];
+      this.col = [];
+      this.edgePos = [];
+      this.edgeCol = [];
+      this.objGroups = {};
+      this.curGroup = 'architecture';
+    }
+    setGroup(name) {
+      this.curGroup = name;
+      if (!this.objGroups[name]) this.objGroups[name] = [];
+    }
+    addTri(a, b, c, rgba, normalOverride = null, recordObj = true) {
+      const n = normalOverride || v3.norm(v3.cross(v3.sub(b, a), v3.sub(c, a)));
+      this.pos.push(a[0],a[1],a[2], b[0],b[1],b[2], c[0],c[1],c[2]);
+      this.nor.push(n[0],n[1],n[2], n[0],n[1],n[2], n[0],n[1],n[2]);
+      const r = rgba[0], g = rgba[1], bl = rgba[2], al = rgba[3] ?? 1.0;
+      this.col.push(r,g,bl,al, r,g,bl,al, r,g,bl,al);
+      if (recordObj) {
+        if (!this.objGroups[this.curGroup]) this.objGroups[this.curGroup] = [];
+        this.objGroups[this.curGroup].push([a, b, c]);
+      }
+    }
+    addQuad(a, b, c, d, rgba, addEdges = false, edgeColor = null, recordObj = true) {
+      this.addTri(a, b, c, rgba, null, recordObj);
+      this.addTri(a, c, d, rgba, null, recordObj);
+      if (addEdges) {
+        const ec = edgeColor || [0.18, 0.20, 0.24, 0.55];
+        this.addEdge(a, b, ec);
+        this.addEdge(b, c, ec);
+        this.addEdge(c, d, ec);
+        this.addEdge(d, a, ec);
+      }
+    }
+    addEdge(a, b, rgba) {
+      const r = rgba[0], g = rgba[1], bl = rgba[2], al = rgba[3] ?? 1.0;
+      this.edgePos.push(a[0],a[1],a[2], b[0],b[1],b[2]);
+      this.edgeCol.push(r,g,bl,al, r,g,bl,al);
+    }
+    // Axis-aligned or Y-rotated box centered at (cx, cy, cz) with size (sx, sy, sz)
+    addBox(cx, cy, cz, sx, sy, sz, rgba, rotY = 0, edges = true, edgeColor = null, recordObj = true) {
+      const hx = sx/2, hy = sy/2, hz = sz/2;
+      const co = Math.cos(rotY), si = Math.sin(rotY);
+      const tf = (lx, ly, lz) => [
+        cx + lx * co + lz * si,
+        cy + ly,
+        cz - lx * si + lz * co
+      ];
+      const p000 = tf(-hx,-hy,-hz), p100 = tf(hx,-hy,-hz), p110 = tf(hx,hy,-hz), p010 = tf(-hx,hy,-hz);
+      const p001 = tf(-hx,-hy, hz), p101 = tf(hx,-hy, hz), p111 = tf(hx,hy, hz), p011 = tf(-hx,hy, hz);
+      // 6 faces outward CCW
+      this.addQuad(p001, p101, p111, p011, rgba, false, null, recordObj); // +Z
+      this.addQuad(p100, p000, p010, p110, rgba, false, null, recordObj); // -Z
+      this.addQuad(p101, p100, p110, p111, rgba, false, null, recordObj); // +X
+      this.addQuad(p000, p001, p011, p010, rgba, false, null, recordObj); // -X
+      this.addQuad(p011, p111, p110, p010, rgba, false, null, recordObj); // +Y
+      this.addQuad(p000, p100, p101, p001, rgba, false, null, recordObj); // -Y
+      if (edges) {
+        const ec = edgeColor || [0.16, 0.18, 0.22, 0.42];
+        const segs = [
+          [p000,p100],[p100,p101],[p101,p001],[p001,p000],
+          [p010,p110],[p110,p111],[p111,p011],[p011,p010],
+          [p000,p010],[p100,p110],[p101,p111],[p001,p011]
+        ];
+        for (const [u, v] of segs) this.addEdge(u, v, ec);
+      }
+    }
+    // Extruded convex 2D polygon in XZ plane from y0 to y1 (pts in CCW order looking from +Y, i.e. (x,z) clockwise in top-down screen!)
+    addPrismXZ(ptsXZ, y0, y1, rgba, edges = true, edgeColor = null, recordObj = true) {
+      const n = ptsXZ.length;
+      const bot = ptsXZ.map(([x, z]) => [x, y0, z]);
+      const top = ptsXZ.map(([x, z]) => [x, y1, z]);
+      // Top & bottom fans (assuming ptsXZ is clockwise in X-right Z-down = CCW from +Y!)
+      // Let's verify winding: (0,0)->(0,1)->(1,1): cross((0,0,1), (1,0,1)) = (0, +1, 0)!
+      // Ensure top normal points +Y:
+      const e1 = v3.sub(top[1], top[0]), e2 = v3.sub(top[2], top[0]);
+      const flip = v3.cross(e1, e2)[1] < 0;
+      for (let i = 1; i < n - 1; i++) {
+        if (!flip) {
+          this.addTri(top[0], top[i], top[i+1], rgba, [0,1,0], recordObj);
+          this.addTri(bot[0], bot[i+1], bot[i], rgba, [0,-1,0], recordObj);
+        } else {
+          this.addTri(top[0], top[i+1], top[i], rgba, [0,1,0], recordObj);
+          this.addTri(bot[0], bot[i], bot[i+1], rgba, [0,-1,0], recordObj);
+        }
+      }
+      const ec = edgeColor || [0.16, 0.18, 0.22, 0.42];
+      for (let i = 0; i < n; i++) {
+        const j = (i + 1) % n;
+        if (!flip) {
+          this.addQuad(bot[j], bot[i], top[i], top[j], rgba, false, null, recordObj);
+        } else {
+          this.addQuad(bot[i], bot[j], top[j], top[i], rgba, false, null, recordObj);
+        }
+        if (edges) {
+          this.addEdge(bot[i], bot[j], ec);
+          this.addEdge(top[i], top[j], ec);
+          this.addEdge(bot[i], top[i], ec);
+        }
+      }
+    }
+    // Arbitrary oriented cylinder/frustum along axis from p0 to p1
+    addCylinder(p0, p1, r0, r1, rgba, segs = 20, cap0 = true, cap1 = true, edgeRing = false, recordObj = true) {
+      const axis = v3.sub(p1, p0);
+      const len = v3.len(axis);
+      if (len < 1e-5) return;
+      const dir = v3.scale(axis, 1 / len);
+      const ref = Math.abs(dir[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0];
+      const u = v3.norm(v3.cross(ref, dir));
+      const v = v3.cross(dir, u);
+      const ring0 = [], ring1 = [];
+      for (let i = 0; i < segs; i++) {
+        const ang = (i / segs) * Math.PI * 2;
+        const c = Math.cos(ang), s = Math.sin(ang);
+        const radial = [u[0]*c + v[0]*s, u[1]*c + v[1]*s, u[2]*c + v[2]*s];
+        ring0.push(v3.add(p0, v3.scale(radial, r0)));
+        ring1.push(v3.add(p1, v3.scale(radial, r1)));
+      }
+      for (let i = 0; i < segs; i++) {
+        const j = (i + 1) % segs;
+        if (r0 > 1e-4 && r1 > 1e-4) {
+          this.addQuad(ring0[i], ring0[j], ring1[j], ring1[i], rgba, false, null, recordObj);
+        } else if (r0 <= 1e-4) {
+          this.addTri(p0, ring1[j], ring1[i], rgba, null, recordObj);
+        } else {
+          this.addTri(ring0[i], ring0[j], p1, rgba, null, recordObj);
+        }
+        if (cap0 && r0 > 1e-4) this.addTri(p0, ring0[j], ring0[i], rgba, v3.scale(dir, -1), recordObj);
+        if (cap1 && r1 > 1e-4) this.addTri(p1, ring1[i], ring1[j], rgba, dir, recordObj);
+        if (edgeRing) {
+          const ec = [rgba[0]*0.5, rgba[1]*0.5, rgba[2]*0.5, 0.7];
+          if (r0 > 1e-4) this.addEdge(ring0[i], ring0[j], ec);
+          if (r1 > 1e-4) this.addEdge(ring1[i], ring1[j], ec);
+        }
+      }
+    }
+    // UV sphere for Focal Dôme Flax & viewer heads
+    addSphere(center, radius, rgba, latSegs = 10, lonSegs = 16, recordObj = true) {
+      const rings = [];
+      for (let i = 0; i <= latSegs; i++) {
+        const phi = (i / latSegs) * Math.PI;
+        const y = Math.cos(phi) * radius;
+        const r = Math.sin(phi) * radius;
+        const ring = [];
+        for (let j = 0; j < lonSegs; j++) {
+          const th = (j / lonSegs) * Math.PI * 2;
+          ring.push([center[0] + r*Math.cos(th), center[1] + y, center[2] + r*Math.sin(th)]);
+        }
+        rings.push(ring);
+      }
+      for (let i = 0; i < latSegs; i++) {
+        for (let j = 0; j < lonSegs; j++) {
+          const jn = (j + 1) % lonSegs;
+          const a = rings[i][j], b = rings[i+1][j], c = rings[i+1][jn], d = rings[i][jn];
+          if (i > 0) this.addTri(a, b, d, rgba, null, recordObj);
+          if (i < latSegs - 1) this.addTri(b, c, d, rgba, null, recordObj);
+        }
+      }
+    }
+    // Oriented box given center, 3 orthonormal axes (right, up, fwd), and sizes
+    addOrientedBox(center, right, up, fwd, sx, sy, sz, rgba, edges = true, edgeColor = null, recordObj = true) {
+      const hx = sx/2, hy = sy/2, hz = sz/2;
+      const pt = (lx, ly, lz) => [
+        center[0] + right[0]*lx + up[0]*ly + fwd[0]*lz,
+        center[1] + right[1]*lx + up[1]*ly + fwd[1]*lz,
+        center[2] + right[2]*lx + up[2]*ly + fwd[2]*lz
+      ];
+      const p000 = pt(-hx,-hy,-hz), p100 = pt(hx,-hy,-hz), p110 = pt(hx,hy,-hz), p010 = pt(-hx,hy,-hz);
+      const p001 = pt(-hx,-hy, hz), p101 = pt(hx,-hy, hz), p111 = pt(hx,hy, hz), p011 = pt(-hx,hy, hz);
+      this.addQuad(p001, p101, p111, p011, rgba, false, null, recordObj);
+      this.addQuad(p100, p000, p010, p110, rgba, false, null, recordObj);
+      this.addQuad(p101, p100, p110, p111, rgba, false, null, recordObj);
+      this.addQuad(p000, p001, p011, p010, rgba, false, null, recordObj);
+      this.addQuad(p011, p111, p110, p010, rgba, false, null, recordObj);
+      this.addQuad(p000, p100, p101, p001, rgba, false, null, recordObj);
+      if (edges) {
+        const ec = edgeColor || [0.15, 0.17, 0.21, 0.45];
+        for (const [u, v] of [
+          [p000,p100],[p100,p101],[p101,p001],[p001,p000],
+          [p010,p110],[p110,p111],[p111,p011],[p011,p010],
+          [p000,p010],[p100,p110],[p101,p111],[p001,p011]
+        ]) this.addEdge(u, v, ec);
+      }
+    }
+  }
+
+  // =========================================================================
+  // 4. BUILD COMPLETE ARCHITECTURAL + HOME CINEMA 3D SCENE
+  // =========================================================================
+  let cachedOpaque = null;
+  let cachedTrans = null;
+  let lastObjSource = null;
+
+  function buildSceneMeshes() {
+    const op = new MeshAccumulator();
+    const tr = new MeshAccumulator();
+    const xray = state.xray;
+
+    // Color palette (architectural warm modern interior)
+    const C = {
+      floorSejour:   [0.82, 0.78, 0.71, 1.0],
+      floorDining:   [0.80, 0.75, 0.67, 1.0],
+      terraceDeck:   [0.64, 0.56, 0.46, 1.0],
+      concrete:      [0.66, 0.67, 0.68, 1.0],
+      concreteCol:   [0.52, 0.55, 0.59, xray ? 0.45 : 1.0],
+      wallPlaster:   [0.92, 0.91, 0.88, xray ? 0.18 : 1.0],
+      lining12cm:    [0.88, 0.84, 0.76, xray ? 0.24 : 1.0],
+      wallDarkTrim:  [0.22, 0.24, 0.27, 1.0],
+      woodWarm:      [0.69, 0.51, 0.34, 1.0],
+      woodDark:      [0.52, 0.37, 0.23, 1.0],
+      sofaFabric:    [0.85, 0.83, 0.79, 1.0],
+      sofaCushion:   [0.89, 0.87, 0.83, 1.0],
+      armchair:      [0.62, 0.66, 0.68, 1.0],
+      rug:           [0.77, 0.75, 0.71, 1.0],
+      terrazzo:      [0.83, 0.82, 0.80, 1.0],
+      kitchenCab:    [0.88, 0.86, 0.82, 1.0],
+      glass:         [0.55, 0.78, 0.92, 0.22],
+      ceilingSlab:   [0.93, 0.93, 0.91, xray ? 0.14 : 0.82],
+      fireplaceBox:  [0.18, 0.19, 0.21, 1.0],
+      fireGlow:      [0.95, 0.48, 0.15, 0.92],
+      screenWhite:   [0.97, 0.98, 1.00, 1.0],
+      screenBlack:   [0.10, 0.11, 0.13, 1.0],
+      shadow:        [0.08, 0.09, 0.11, 0.14]
+    };
+
+    const wallTarget = xray ? tr : op;
+
+    // -----------------------------------------------------------------------
+    // A. FLOORS, STEPS & TERRACE CONTEXT
+    // -----------------------------------------------------------------------
+    op.setGroup('floors_and_steps');
+    // Séjour floor slab (+18.90 -> Y = 0.00, thickness 0.24 down)
+    op.addPrismXZ([[0, 0], [0, zSouth(0)], [5.24, zSouth(5.24)], [5.24, 0]], -0.24, 0.0, C.floorSejour, true);
+    // Dining + Kitchen raised floor (+19.42 -> Y = +0.52)
+    op.addPrismXZ([[5.24, 0], [5.24, zSouth(5.24)], [10.85, zSouth(10.85)], [10.85, 0]], -0.24, DINING_Y, C.floorDining, true);
+    // Entry threshold (+19.77 -> Y = +0.87) at SE corner
+    op.addPrismXZ([[10.85, 4.65], [10.85, zSouth(10.85)], [11.65, zSouth(11.65)], [11.65, 4.65]], -0.24, 0.87, C.concrete, true);
+    // Two small entry steps (10.50 -> 10.85)
+    op.addBox(10.67, 0.61, 5.42, 0.36, 0.18, 1.38, C.floorDining, 0, true);
+
+    // Concrete platform (+0.18 m) under L-shaped sofa + South walkway step
+    op.addPrismXZ([
+      [4.32, 0.30], [4.32, 5.34], [5.24, 5.34], [5.24, 0.30]
+    ], 0.0, STEP_Y, C.concrete, true);
+    // North sofa concrete base (continuing from fireplace hearth)
+    op.addBox(3.58, STEP_Y/2, 0.76, 1.48, STEP_Y, 0.92, C.concrete, 0, true);
+    // Open step South of sofa (from séjour 0.00 -> 0.26 -> 0.52 dining)
+    op.addPrismXZ([
+      [4.74, 5.34], [4.74, zSouth(4.74)], [5.24, zSouth(5.24)], [5.24, 5.34]
+    ], 0.0, 0.26, C.concrete, true);
+
+    // Fireplace hearth concrete plinth along North wall (0..2.85 m, Z=0..0.98 m)
+    if (state.subMode === 'north_bench') {
+      // Left & fireplace concrete hearth, plus raised wooden banquette (H=0.46 m) on right for recessed SVS 2000
+      op.addBox(1.20, STEP_Y/2, 0.49, 2.40, STEP_Y, 0.98, C.terrazzo, 0, true);
+      // Wooden banquette structure with carved front niche (X = 2.40..2.94, Z = 0..0.98, H = 0.46)
+      op.addBox(2.67, 0.43, 0.49, 0.56, 0.06, 0.98, C.woodWarm, 0, true); // top plank
+      op.addBox(2.43, 0.20, 0.49, 0.05, 0.40, 0.98, C.woodWarm, 0, true); // left cheek
+      op.addBox(2.91, 0.20, 0.49, 0.05, 0.40, 0.98, C.woodWarm, 0, true); // right cheek
+      op.addBox(2.67, 0.20, 0.04, 0.46, 0.40, 0.06, C.woodDark, 0, true); // rear back
+    } else {
+      op.addBox(1.425, STEP_Y/2, 0.49, 2.85, STEP_Y, 0.98, C.terrazzo, 0, true);
+    }
+
+    // Terrace context deck on West (-3.98 .. 0.00 m, matching exact 3.49 m + pillar terrace width)
+    op.addPrismXZ([[-3.98, -0.50], [-3.98, zSouth(-3.98)+0.52], [0, zSouth(0)+0.52], [0, -0.50]], -0.24, -0.02, C.terraceDeck, true);
+
+    // -----------------------------------------------------------------------
+    // B. STRUCTURAL COLUMNS (50x50 cm EXACT ALIGNMENT), 12 cm LINING & WALLS
+    // -----------------------------------------------------------------------
+    wallTarget.setGroup('walls_and_structure');
+
+    // South facade orthonormal frame (exact -6.263 deg collinear axis for ALL 6 South pillars S0..S5)
+    const sRight = [Math.cos(SOUTH_ANGLE), 0, Math.sin(SOUTH_ANGLE)]; // along South facade (+X, -Z)
+    const sUp    = [0, 1, 0];
+    const sOut   = [-Math.sin(SOUTH_ANGLE), 0, Math.cos(SOUTH_ANGLE)]; // outward (+South)
+
+    // Terrace West exterior pillars (X = -3.72 m): TW0 (NW), TW1 (mid-N), TW2 (mid-S)
+    // (S0 at Terrace SW is placed below on the exact South pillar line S0..S5!)
+    for (const tz of [-0.25, 2.53, 5.29]) {
+      op.addBox(-3.72, CEIL_Y/2, tz, 0.50, CEIL_Y, 0.50, C.concreteCol, 0, true);
+    }
+
+    // --- NORTH WALL (Z = 0 inner face; 50 cm total pillar depth: 12 cm doublage + 38 cm concrete behind) ---
+    // NW corner pillar (solid 50x50 cm outside/corner) + N2..N5
+    wallTarget.addBox(-0.25, CEIL_Y/2, -0.25, 0.50, CEIL_Y, 0.50, C.concreteCol, 0, true);
+    const northIntColXs = [2.43, 5.11, 7.78, 10.46];
+    for (const cx of northIntColXs) {
+      // Concrete structural pillar behind 12 cm doublage (Z = -0.12..-0.50 -> depth 0.38 m, total 0.50 m)
+      wallTarget.addBox(cx, CEIL_Y/2, -0.31, 0.50, CEIL_Y, 0.38, C.concreteCol, 0, true);
+      if (Math.abs(cx - 5.11) < 0.1) {
+        // Explicit 12 cm doublage block for SR speaker!
+        wallTarget.addBox(cx, CEIL_Y/2, -0.06, 0.50, CEIL_Y, 0.12, C.lining12cm, 0, true, [0.85, 0.25, 0.35, 0.75]);
+      } else if (cx < 10.3) {
+        wallTarget.addBox(cx, CEIL_Y/2, -0.06, 0.50, CEIL_Y, 0.12, C.wallPlaster, 0, true);
+      }
+    }
+    // North solid bays: Bay 1 (0..2.18), Bay 2 (2.68..4.86), Bay 4 (8.03..10.21) + kitchen end
+    wallTarget.addBox(1.09,  CEIL_Y/2, -0.22, 2.18, CEIL_Y, 0.44, C.wallPlaster, 0, true);
+    wallTarget.addBox(3.77,  CEIL_Y/2, -0.22, 2.18, CEIL_Y, 0.44, C.wallPlaster, 0, true);
+    wallTarget.addBox(9.12,  CEIL_Y/2, -0.22, 2.18, CEIL_Y, 0.44, C.wallPlaster, 0, true);
+    wallTarget.addBox(10.65, CEIL_Y/2, -0.06, 0.40, CEIL_Y, 0.12, C.wallPlaster, 0, true);
+
+    // North window M 07 (X = 5.36 .. 7.53, sill at dining floor +0.52 .. 2.94)
+    op.addBox(6.445, DINING_Y/2, -0.18, 2.17, DINING_Y, 0.36, C.wallPlaster, 0, true);
+    op.addBox(6.445, 2.98, -0.18, 2.17, 0.08, 0.20, C.wallDarkTrim, 0, true);
+    op.addBox(6.445, DINING_Y + 0.03, -0.18, 2.17, 0.06, 0.12, C.wallDarkTrim, 0, true);
+    op.addBox(6.72,  (DINING_Y + 2.94)/2, -0.18, 0.06, 2.42, 0.08, C.wallDarkTrim, 0, false); // mullion
+    tr.addBox(6.445, (DINING_Y + 2.94)/2, -0.18, 2.14, 2.38, 0.03, C.glass, 0, false, null, false);
+
+    // --- WEST WALL (X = 0 inner face; Z = 0..2.78 solid + middle pillar; Z = 2.78..7.26 glass bay M 06) ---
+    // Upper solid insulated West wall (Z = 0..2.28)
+    wallTarget.addBox(-0.22, CEIL_Y/2, 1.14, 0.44, CEIL_Y, 2.28, C.wallPlaster, 0, true);
+    // Middle West structural column (Z = 2.28..2.78, aligned with NW & S1: X = -0.50..-0.12 concrete + -0.12..0 doublage)
+    wallTarget.addBox(-0.31, CEIL_Y/2, 2.53, 0.38, CEIL_Y, 0.50, C.concreteCol, 0, true);
+    wallTarget.addBox(-0.06, CEIL_Y/2, 2.53, 0.12, CEIL_Y, 0.50, C.lining12cm, 0, true, [0.90, 0.58, 0.05, 0.65]);
+
+    // Sliding glass bay M 06 (Z = 2.78 .. 7.26, meeting South bay M 05 at glazed corner (0, 7.28)!)
+    const zSWCorner = zSouth(0); // 7.282 m
+    const m06Len = zSWCorner - 2.78;
+    const m06Mid = (2.78 + zSWCorner) / 2;
+    op.addBox(-0.05, 2.98, m06Mid, 0.12, 0.08, m06Len, C.wallDarkTrim, 0, true);
+    op.addBox(-0.05, 0.03, m06Mid, 0.12, 0.06, m06Len, C.wallDarkTrim, 0, true);
+    // Corner aluminum post at glass junction (0.00, 7.28) + sliding door stiles
+    for (const mz of [2.80, 5.02, zSWCorner - 0.02]) {
+      op.addBox(-0.04, CEIL_Y/2, mz, 0.08, CEIL_Y - 0.06, 0.07, C.wallDarkTrim, 0, false);
+    }
+    tr.addBox(-0.04, 1.50, m06Mid, 0.03, 2.88, m06Len - 0.08, C.glass, 0, false, null, false);
+
+    // --- ALL 6 SOUTH PILLARS (S0..S5) ALIGNED COLLINEARLY AT -6.263 DEG ---
+    // Exterior pillars S0 (terrace SW, X=-3.72) and S1 (séjour SW, X=-0.25):
+    // Full 50x50 cm solid concrete spanning 0..+0.50 along sOut — ALL 4 faces of S1 are OUTSIDE the glazed corner!
+    for (const cx of [-3.72, -0.25]) {
+      const cz = zSouth(cx);
+      const colCenter = [cx + sOut[0]*0.25, CEIL_Y/2, cz + sOut[2]*0.25];
+      op.addOrientedBox(colCenter, sRight, sUp, sOut, 0.50, CEIL_Y, 0.50, C.concreteCol, true);
+    }
+
+    // Interior South pillars S2..S5 & glazed bays M 05, M 04, M 03, M 02 (hidden when cutSouth active)
+    if (!state.cutSouth) {
+      const southIntColXs = [2.43, 5.11, 7.78, 10.46];
+      for (const cx of southIntColXs) {
+        const cz = zSouth(cx);
+        // 12 cm interior doublage (0..+0.12 along sOut) + 38 cm concrete column behind (+0.12..+0.50 along sOut)
+        // -> inner face (0.00) & outer face (+0.50) are 100% collinear with S0 and S1!
+        const linCenter = [cx + sOut[0]*0.06, CEIL_Y/2, cz + sOut[2]*0.06];
+        const colCenter = [cx + sOut[0]*0.31, CEIL_Y/2, cz + sOut[2]*0.31];
+        wallTarget.addOrientedBox(colCenter, sRight, sUp, sOut, 0.50, CEIL_Y, 0.38, C.concreteCol, true);
+        if (Math.abs(cx - 5.11) < 0.1) {
+          // Explicit 12 cm doublage for SL!
+          wallTarget.addOrientedBox(linCenter, sRight, sUp, sOut, 0.50, CEIL_Y, 0.12, C.lining12cm, true, [0.85, 0.20, 0.30, 0.75]);
+        } else {
+          wallTarget.addOrientedBox(linCenter, sRight, sUp, sOut, 0.50, CEIL_Y, 0.12, C.wallPlaster, true);
+        }
+      }
+      // South glazed bays between columns (M 05 starts right at X=0.00 glazed corner, meeting M 06!)
+      const southBays = [
+        [0.00, 2.18, 0.0],
+        [2.68, 4.86, 0.0],
+        [5.36, 7.53, DINING_Y],
+        [8.03, 10.21, DINING_Y]
+      ];
+      for (const [x0, x1, floorY] of southBays) {
+        const xm = (x0 + x1) / 2;
+        const zm = zSouth(xm);
+        const bayLen = Math.hypot(x1 - x0, zSouth(x1) - zSouth(x0));
+        const glassCenter = [xm + sOut[0]*0.06, (floorY + 2.95)/2, zm + sOut[2]*0.06];
+        // Bottom rail + top header
+        op.addOrientedBox([xm + sOut[0]*0.06, floorY + 0.03, zm + sOut[2]*0.06], sRight, sUp, sOut, bayLen, 0.06, 0.11, C.wallDarkTrim, false);
+        op.addOrientedBox([xm + sOut[0]*0.06, 2.98, zm + sOut[2]*0.06], sRight, sUp, sOut, bayLen, 0.08, 0.12, C.wallDarkTrim, false);
+        // Center vertical mullion
+        op.addOrientedBox(glassCenter, sRight, sUp, sOut, 0.05, 2.90 - floorY, 0.07, C.wallDarkTrim, false);
+        if (floorY > 0.05) {
+          op.addOrientedBox([xm + sOut[0]*0.10, floorY/2, zm + sOut[2]*0.10], sRight, sUp, sOut, bayLen, floorY, 0.22, C.wallPlaster, true);
+        }
+        tr.addOrientedBox(glassCenter, sRight, sUp, sOut, bayLen - 0.06, 2.86 - floorY, 0.03, C.glass, false, null, false);
+      }
+    } else {
+      // Subtle floor/wall trace so SL surround position remains grounded in section view
+      op.addEdge([0, 0.01, zSouth(0)], [10.85, 0.01, zSouth(10.85)], [0.45, 0.50, 0.58, 0.55]);
+    }
+
+    // --- EAST KITCHEN WALL (X = 10.85, Z = 0..4.65 solid wall; 4.65..6.15 opening to entry) ---
+    wallTarget.addBox(10.97, CEIL_Y/2, 2.32, 0.24, CEIL_Y, 4.65, C.wallPlaster, 0, true);
+
+    // -----------------------------------------------------------------------
+    // C. NORTH WALL ARCHITECTURE: FIREPLACE, BUILT-IN BOOKCASE, AG 04
+    // -----------------------------------------------------------------------
+    op.setGroup('fireplace_and_bookcase');
+    // Fireplace masonry surround (X = 1.26..2.40, Z = 0..0.71, full height chimney breast)
+    op.addBox(1.83, 1.94, 0.35, 1.14, 2.16, 0.70, C.wallPlaster, 0, true); // upper breast (Y = 0.86..3.02)
+    op.addBox(1.34, 0.52, 0.35, 0.16, 0.68, 0.70, C.wallPlaster, 0, true); // left jamb
+    op.addBox(2.32, 0.52, 0.35, 0.16, 0.68, 0.70, C.wallPlaster, 0, true); // right jamb
+    op.addBox(1.83, 0.52, 0.14, 0.82, 0.68, 0.26, C.fireplaceBox, 0, false); // dark firebox interior
+    // Subtle stylized fire embers
+    op.addBox(1.83, 0.28, 0.34, 0.58, 0.14, 0.18, C.fireGlow, 0, false);
+    // Exterior cylindrical flue pipe on North side
+    op.addCylinder([1.83, 0.60, -0.58], [1.83, CEIL_Y + 0.3, -0.58], 0.11, 0.11, C.wallDarkTrim, 14);
+
+    // Built-in North wall bookcase shelves (East of fireplace X=2.40..4.85; North-West wall left clear)
+    const shelfYs = [0.88, 1.32, 1.76, 2.20];
+    for (const sy of shelfYs) {
+      op.addBox(3.04, sy, 0.16, 1.26, 0.035, 0.30, C.wallPlaster, 0, true); // middle bay
+      op.addBox(4.32, sy, 0.16, 1.06, 0.035, 0.30, C.wallPlaster, 0, true); // right bay
+    }
+    // Bookcase vertical dividers matching vue coupe.png
+    op.addBox(3.67, 1.60, 0.16, 0.04, 2.82, 0.32, C.wallPlaster, 0, true);
+    op.addBox(4.85, 1.60, 0.16, 0.04, 2.82, 0.32, C.wallPlaster, 0, true);
+    // AG 04 wooden ledge/trim behind sofa along North wall (X = 2.40..5.24, Z = 0..0.30)
+    op.addBox(3.82, 0.82, 0.15, 2.84, 0.05, 0.30, C.woodWarm, 0, true);
+
+    // -----------------------------------------------------------------------
+    // D. LIVING ROOM FURNITURE: L-SOFA, WOODEN BANQUETTE/MEUBLE, ARMCHAIRS, RUG
+    // -----------------------------------------------------------------------
+    op.setGroup('living_furniture');
+
+    // L-shaped sofa on concrete platform (+0.18 m): seat top 0.445 m, backrest top 0.79 m
+    // Main East run (X = 4.40..5.24, Z = 0.31..5.31, 5 modular cushions)
+    for (let i = 0; i < 5; i++) {
+      const cz = 0.81 + i * 1.00;
+      op.addBox(4.80, STEP_Y + 0.135, cz, 0.82, 0.27, 0.98, C.sofaCushion, 0, true);
+      op.addBox(5.12, STEP_Y + 0.42,  cz, 0.22, 0.36, 0.97, C.sofaFabric, 0, true);
+    }
+    // North chaise return (X = 2.90..4.40, Z = 0.31..1.20)
+    op.addBox(3.65, STEP_Y + 0.135, 0.76, 1.48, 0.27, 0.88, C.sofaCushion, 0, true);
+    op.addBox(3.65, STEP_Y + 0.42,  0.42, 1.48, 0.36, 0.22, C.sofaFabric, 0, true);
+
+    // LONG WOODEN BANQUETTE / MEUBLE BEHIND SPECTATORS
+    // Wings: X = 5.24..5.74 (50 cm width), H = 70 cm above dining floor (+0.52 -> +1.22 m)
+    // Central Projector Bay (Z = 2.36..3.02): widened to 60 cm (X = 5.24..5.84), shelf at +82 cm (+1.34 m),
+    // with protective wooden hood enclosing top, sides & rear (open at front -X toward screen!)
+    const mbTopY = DINING_Y + 0.70;    // 1.22 m above séjour floor (wings)
+    const projShelfY = DINING_Y + 0.82; // 1.34 m above séjour floor (82 cm above dining floor!)
+    const projLidBot = projShelfY + 0.25; // 1.59 m (25 cm internal clearance for 21 cm Sony VPL-XW6100)
+    const projLidTop = projLidBot + 0.04; // 1.63 m top of protective hood
+    const hoodTarget = xray ? tr : op;
+    const woodHood = xray ? [0.69, 0.51, 0.34, 0.30] : C.woodWarm;
+    const woodHoodDark = xray ? [0.52, 0.37, 0.23, 0.32] : C.woodDark;
+
+    // Continuous front apron behind sofa (X = 5.24..5.29, Y = 0.18..0.52, Z = 0.30..5.31)
+    op.addBox(5.265, (STEP_Y + DINING_Y)/2, 2.805, 0.05, DINING_Y - STEP_Y, 5.01, C.woodDark, 0, true);
+
+    // 1) NORTH WING (Z = 0.30..2.36)
+    if (state.subMode === 'rear_bench_north') {
+      // Carved niche at North end (Z = 0.30..0.85) for SVS 2000, open toward North (-Z) & NE corner
+      op.addBox(5.49, 1.12, 0.575, 0.50, 0.20, 0.55, C.woodWarm, 0, true); // top slab above niche
+      op.addBox(5.26, 0.77, 0.575, 0.04, 0.50, 0.55, C.woodDark, 0, true); // West backing cheek (behind sofa)
+      op.addBox(5.71, 0.77, 0.33,  0.06, 0.50, 0.06, C.woodWarm, 0, true); // slim NE oak corner support leg
+      op.addBox(5.49, 0.535, 0.575, 0.44, 0.025, 0.48, [0.16, 0.16, 0.18, 1.0], 0, false); // acoustic isolation pad
+      // Solid North wing between niche (0.85) and projector bay (2.36)
+      op.addBox(5.49, (DINING_Y + mbTopY)/2, 1.605, 0.50, 0.70, 1.51, C.woodWarm, 0, true);
+    } else {
+      op.addBox(5.49, (DINING_Y + mbTopY)/2, 1.33, 0.50, 0.70, 2.06, C.woodWarm, 0, true);
+    }
+
+    // 2) CENTRAL WIDENED 60 cm PROJECTOR BAY + PROTECTIVE ENCLOSURE (Z = 2.36..3.02, X = 5.24..5.84)
+    // Lower solid cabinet up to 82 cm above dining floor (Y = 0.52..1.34)
+    op.addBox(5.54, (DINING_Y + projShelfY)/2, 2.69, 0.60, 0.82, 0.66, C.woodWarm, 0, true);
+    // Dark matte shelf surface inside projector cavity
+    op.addBox(5.52, projShelfY + 0.008, 2.69, 0.54, 0.016, 0.58, [0.15, 0.16, 0.19, 1.0], 0, false);
+    // Protective hood enclosing North cheek, South cheek, East back & Top lid — OPEN AT FRONT (-X)!
+    hoodTarget.addBox(5.54, (projShelfY + projLidBot)/2, 2.38, 0.60, 0.25, 0.04, woodHood, 0, true);     // North side wall
+    hoodTarget.addBox(5.54, (projShelfY + projLidBot)/2, 3.00, 0.60, 0.25, 0.04, woodHood, 0, true);     // South side wall
+    hoodTarget.addBox(5.82, (projShelfY + projLidBot)/2, 2.69, 0.04, 0.25, 0.66, woodHoodDark, 0, true); // East rear protective wall
+    hoodTarget.addBox(5.54, (projLidBot + projLidTop)/2, 2.69, 0.60, 0.04, 0.66, woodHood, 0, true);     // Top protective lid
+    // Subtle dark rear ventilation slot on East dining-side panel (for Sony exhaust airflow)
+    op.addBox(5.842, projLidBot - 0.055, 2.69, 0.006, 0.055, 0.42, [0.16, 0.17, 0.20, 1.0], 0, false);
+
+    // 3) SOUTH WING (Z = 3.02..5.31)
+    if (state.subMode === 'rear_bench') {
+      // Solid South wing between projector bay (3.02) and South niche (4.76)
+      op.addBox(5.49, (DINING_Y + mbTopY)/2, 3.89, 0.50, 0.70, 1.74, C.woodWarm, 0, true);
+      // Carved niche at South end (Z = 4.76..5.31) for SVS 2000, open toward South/SW
+      op.addBox(5.49, 1.12, 5.035, 0.50, 0.20, 0.55, C.woodWarm, 0, true); // top slab
+      op.addBox(5.72, 0.77, 5.035, 0.04, 0.50, 0.55, C.woodDark, 0, true); // East back panel
+      op.addBox(5.70, 0.77, 5.29,  0.08, 0.50, 0.04, C.woodWarm, 0, true); // SE trim post
+      op.addBox(5.48, 0.535, 5.035, 0.44, 0.025, 0.48, [0.16, 0.16, 0.18, 1.0], 0, false); // acoustic pad
+    } else {
+      op.addBox(5.49, (DINING_Y + mbTopY)/2, 4.165, 0.50, 0.70, 2.29, C.woodWarm, 0, true);
+    }
+
+    // Round rug + round coffee table (centered at X=2.70, Z=2.67)
+    op.addCylinder([2.70, 0.00, 2.67], [2.70, 0.015, 2.67], 1.65, 1.65, C.rug, 32, false, true);
+    op.addCylinder([2.70, 0.015, 2.67], [2.70, 0.34, 2.67], 0.18, 0.18, C.woodDark, 16);
+    op.addCylinder([2.70, 0.34, 2.67], [2.70, 0.38, 2.67], 0.58, 0.58, C.woodWarm, 24, true, true, true);
+
+    // Two angled armchairs from plan_enceintes.png
+    const armchairs = [
+      { cx: 1.48, cz: 3.10, rot: -0.42 },
+      { cx: 2.86, cz: 4.46, rot: 0.25 }
+    ];
+    for (const ac of armchairs) {
+      op.addBox(ac.cx, 0.22, ac.cz, 0.76, 0.28, 0.76, C.armchair, ac.rot, true);
+      const bx = ac.cx - Math.sin(ac.rot)*0.30, bz = ac.cz - Math.cos(ac.rot)*0.30;
+      op.addBox(bx, 0.52, bz, 0.76, 0.42, 0.18, C.armchair, ac.rot, true);
+    }
+
+    // Optional seated viewers at MLP to verify projector beam clearance & sightlines!
+    if (state.showViewer) {
+      const personCol = [0.35, 0.42, 0.52, 0.88];
+      for (const pz of [2.68, 3.55]) {
+        const px = 4.78;
+        // Seated torso & legs
+        op.addBox(px - 0.16, STEP_Y + 0.30, pz, 0.38, 0.14, 0.34, personCol, 0, false); // thighs
+        op.addBox(px + 0.02, STEP_Y + 0.58, pz, 0.22, 0.48, 0.38, personCol, 0, false); // torso
+        // Head (center at Y ~ 1.12, top of head at ~ 1.23 m — matches real seated adult!)
+        op.addSphere([px + 0.02, 1.12, pz], 0.105, personCol, 8, 12, false);
+      }
+      // Subtle MLP floor target ring
+      tr.addCylinder([MLP[0], 0.02, MLP[2]], [MLP[0], 0.025, MLP[2]], 0.38, 0.38, [0.95, 0.70, 0.15, 0.35], 24, false, true, true, false);
+    }
+
+    // -----------------------------------------------------------------------
+    // E. DINING ROOM & KITCHEN (+0.52 m level)
+    // -----------------------------------------------------------------------
+    op.setGroup('dining_and_kitchen');
+    // Dining table (X = 6.52..7.55, Z = 1.63..3.87, height 0.75 m above dining floor)
+    op.addBox(7.04, DINING_Y + 0.73, 2.75, 1.02, 0.05, 2.24, C.woodWarm, 0, true);
+    for (const [lx, lz] of [[6.62, 1.75], [7.46, 1.75], [6.62, 3.75], [7.46, 3.75]]) {
+      op.addBox(lx, DINING_Y + 0.36, lz, 0.06, 0.72, 0.06, C.woodDark, 0, false);
+    }
+    // 6 dining chairs (3 West, 3 East)
+    for (const cz of [2.05, 2.75, 3.45]) {
+      for (const side of [-1, 1]) {
+        const cx = 7.04 + side * 0.64;
+        op.addBox(cx, DINING_Y + 0.44, cz, 0.42, 0.04, 0.42, C.woodWarm, 0, true);
+        op.addBox(cx + side*0.19, DINING_Y + 0.68, cz, 0.04, 0.46, 0.40, C.woodDark, 0, true);
+        op.addBox(cx, DINING_Y + 0.22, cz, 0.36, 0.44, 0.36, [0.42, 0.32, 0.22, 1.0], 0, false);
+      }
+    }
+    // Kitchen island AG 03b (X = 8.49..9.31, Z = 0.89..4.19, height 0.90 m above dining floor)
+    op.addBox(8.90, DINING_Y + 0.42, 2.54, 0.78, 0.84, 2.52, C.woodWarm, 0, true);
+    op.addCylinder([8.90, DINING_Y, 1.28], [8.90, DINING_Y + 0.84, 1.28], 0.39, 0.39, C.woodWarm, 18);
+    op.addCylinder([8.90, DINING_Y, 3.80], [8.90, DINING_Y + 0.84, 3.80], 0.39, 0.39, C.woodWarm, 18);
+    // Island terrazzo countertop
+    op.addBox(8.90, DINING_Y + 0.87, 2.54, 0.82, 0.05, 2.54, C.terrazzo, 0, true);
+    op.addCylinder([8.90, DINING_Y + 0.845, 1.28], [8.90, DINING_Y + 0.895, 1.28], 0.41, 0.41, C.terrazzo, 18);
+    op.addCylinder([8.90, DINING_Y + 0.845, 3.80], [8.90, DINING_Y + 0.895, 3.80], 0.41, 0.41, C.terrazzo, 18);
+    // Cooktop dark plate on island
+    op.addBox(8.90, DINING_Y + 0.902, 2.85, 0.52, 0.012, 0.78, C.wallDarkTrim, 0, false);
+
+    // Kitchen back counter AG 03a (X = 10.18..10.85, Z = 0.02..4.62)
+    op.addBox(10.51, DINING_Y + 0.44, 2.32, 0.66, 0.88, 4.60, C.kitchenCab, 0, true);
+    op.addBox(10.51, DINING_Y + 0.90, 2.32, 0.68, 0.04, 4.60, C.terrazzo, 0, true);
+    // Tall fridge/pantry column at South end of kitchen counter
+    op.addBox(10.51, DINING_Y + 1.15, 4.26, 0.66, 2.30, 0.72, C.kitchenCab, 0, true);
+
+    // -----------------------------------------------------------------------
+    // F. CEILING, RECESSED SCREEN POCKET, CEILING FANS & DROP-DOWN SCREEN
+    // -----------------------------------------------------------------------
+    op.setGroup('screen_and_ceiling');
+    // Recessed ceiling screen casing (3.40 m wide × 0.13 m deep × 0.135 m high, X = 0.25, Z = 0.97..4.37)
+    op.addBox(0.25, CEIL_Y + 0.06, 2.67, 0.14, 0.135, 3.40, C.wallDarkTrim, 0, true);
+    // Motorized projection screen (animated smoothly via state.screenProgress)
+    const sp = state.screenProgress;
+    if (sp > 0.02) {
+      const topY = CEIL_Y;
+      const botBarY = CEIL_Y - (CEIL_Y - 0.86) * sp; // 0.86 m when fully down!
+      const totalH = topY - botBarY;
+      // Full screen canvas (black backing / drop + borders, width 3.04 m centered at Z=2.67)
+      op.addBox(0.25, (topY + botBarY)/2, 2.67, 0.012, totalH, 3.04, C.screenBlack, 0, true);
+      // Active 16:9 white projected image (2.90 m × 1.63 m, Y = 0.945..2.575 when sp=1)
+      const imgBot = Math.max(botBarY + 0.085, 0.945);
+      const imgTop = Math.min(topY - 0.05, imgBot + 1.63);
+      if (imgTop - imgBot > 0.05) {
+        const imgH = imgTop - imgBot;
+        op.addBox(0.258, (imgBot + imgTop)/2, 2.67, 0.008, imgH, 2.90, C.screenWhite, 0, true, [0.45, 0.55, 0.75, 0.8]);
+      }
+      // Bottom weighted bar at exact 86 cm!
+      op.addCylinder([0.25, botBarY, 1.12], [0.25, botBarY, 4.22], 0.022, 0.022, [0.20, 0.22, 0.26, 1.0], 10);
+    }
+
+    // Two ceiling fans (brasseurs d'air) matching vue coupe.png (blades at Y = 2.74 m!)
+    for (const [fx, fz] of [[2.70, 2.67], [7.08, 2.67]]) {
+      op.addCylinder([fx, CEIL_Y, fz], [fx, 2.74, fz], 0.05, 0.05, C.wallDarkTrim, 10);
+      op.addCylinder([fx, 2.71, fz], [fx, 2.77, fz], 0.14, 0.14, C.wallDarkTrim, 12);
+      for (let b = 0; b < 3; b++) {
+        const ang = b * (Math.PI * 2 / 3) + 0.35;
+        const bx = fx + Math.cos(ang) * 0.42, bz = fz + Math.sin(ang) * 0.42;
+        op.addBox(bx, 2.74, bz, 0.76, 0.015, 0.12, [0.75, 0.72, 0.68, 1.0], -ang, true);
+      }
+    }
+
+    // Curtain rail line recessed in ceiling (blue line from plan_enceintes.png)
+    op.addEdge([0.11, CEIL_Y - 0.01, 0.14], [0.11, CEIL_Y - 0.01, zSouth(0.11) - 0.14], [0.20, 0.40, 0.90, 0.65]);
+    op.addEdge([0.11, CEIL_Y - 0.01, zSouth(0.11) - 0.14], [10.4, CEIL_Y - 0.01, zSouth(10.4) - 0.14], [0.20, 0.40, 0.90, 0.65]);
+
+    // Ceiling slab (optional transparent or solid)
+    if (state.showCeiling) {
+      tr.addPrismXZ([[0, 0], [0, zSouth(0)], [10.85, zSouth(10.85)], [10.85, 0]], CEIL_Y, CEIL_Y + 0.20, C.ceilingSlab, true, [0.35, 0.38, 0.42, 0.35], false);
+    } else {
+      // Always draw crisp ceiling perimeter outline so the 3.02 m volume & Atmos plane are unmistakable!
+      const cEdge = [0.42, 0.46, 0.52, 0.45];
+      op.addEdge([0, CEIL_Y, 0], [10.85, CEIL_Y, 0], cEdge);
+      op.addEdge([0, CEIL_Y, 0], [0, CEIL_Y, zSouth(0)], cEdge);
+      op.addEdge([0, CEIL_Y, zSouth(0)], [10.85, CEIL_Y, zSouth(10.85)], cEdge);
+      op.addEdge([10.85, CEIL_Y, 0], [10.85, CEIL_Y, zSouth(10.85)], cEdge);
+      // Atmos entraxe dashed guide line on ceiling plane (TR <-> TL)
+      op.addEdge([4.24, CEIL_Y - 0.01, 1.42], [4.24, CEIL_Y - 0.01, 4.04], [0.06, 0.73, 0.51, 0.75]);
+    }
+
+    // -----------------------------------------------------------------------
+    // G. HIGHLIGHTED HOME CINEMA SPEAKERS & SONY VPL-XW6100 PROJECTOR
+    // -----------------------------------------------------------------------
+    const equipment = getEquipmentList();
+
+    for (const eq of equipment) {
+      op.setGroup('av_' + eq.id);
+      const isSel = state.selectedId === eq.id;
+      const hiCol = isSel
+        ? [Math.min(1, eq.colorRGB[0]*1.25 + 0.15), Math.min(1, eq.colorRGB[1]*1.25 + 0.15), Math.min(1, eq.colorRGB[2]*1.25 + 0.15), 1.0]
+        : [eq.colorRGB[0], eq.colorRGB[1], eq.colorRGB[2], 1.0];
+      const darkBody = [0.11, 0.12, 0.15, 1.0];
+      const flaxCone = [0.76, 0.67, 0.48, 1.0]; // iconic Focal Flax cone color!
+      const [x, y, z] = eq.pos;
+
+      if (eq.id === 'centrale') {
+        // Focal 300 IWLCR6: 600 W (along Z) × 220 H × 98 D mm recessed into West wall (X = 0 -> -0.098)
+        op.addBox(-0.048, y, z, 0.098, 0.220, 0.600, darkBody, 0, true, hiCol);
+        // Highlighted flush bezel frame on X = 0.008
+        op.addBox(0.008, y, z, 0.016, 0.235, 0.615, hiCol, 0, true);
+        // Dual 6.5" Flax woofers + central midrange/tweeter plate!
+        op.addCylinder([0.014, y, z - 0.19], [0.022, y, z - 0.19], 0.075, 0.068, flaxCone, 16);
+        op.addCylinder([0.014, y, z + 0.19], [0.022, y, z + 0.19], 0.075, 0.068, flaxCone, 16);
+        op.addBox(0.018, y, z, 0.010, 0.14, 0.12, [0.22, 0.24, 0.28, 1.0], 0, false);
+        op.addCylinder([0.020, y + 0.03, z], [0.028, y + 0.03, z], 0.022, 0.020, hiCol, 12);
+        // Highlight ring when selected
+        if (isSel) {
+          tr.addBox(0.02, y, z, 0.06, 0.30, 0.68, [eq.colorRGB[0], eq.colorRGB[1], eq.colorRGB[2], 0.26], 0, false, null, false);
+        }
+      } else if (eq.id === 'fr') {
+        // Focal Dôme Flax satellite (172 × 144 × 143 mm) wall-mounted at Y = 1.50 m, aimed at MLP!
+        const dir = v3.norm(v3.sub(eq.aim, eq.pos));
+        // Wall bracket mount on West NW solid wall
+        op.addCylinder([0.0, y, z], eq.pos, 0.032, 0.022, [0.25, 0.27, 0.31, 1.0], 10);
+        // Iconic spherical aluminum dome body
+        op.addSphere(eq.pos, 0.088, darkBody, 10, 14);
+        // Highlight collar ring + Flax driver front face aimed at MLP
+        const facePt = v3.add(eq.pos, v3.scale(dir, 0.068));
+        const coneTip = v3.add(eq.pos, v3.scale(dir, 0.082));
+        op.addCylinder(eq.pos, facePt, 0.086, 0.076, hiCol, 16);
+        op.addCylinder(facePt, coneTip, 0.056, 0.048, flaxCone, 14);
+        if (isSel) {
+          tr.addSphere(eq.pos, 0.16, [eq.colorRGB[0], eq.colorRGB[1], eq.colorRGB[2], 0.28], 8, 12, false);
+        }
+      } else if (eq.id === 'fl') {
+        // Focal Dôme Flax satellite SUSPENDED FROM CEILING (3.02 m) in SW glazed corner!
+        const dir = v3.norm(v3.sub(eq.aim, eq.pos));
+        const metalCol = [0.24, 0.27, 0.32, 1.0];
+        // Ceiling rosette / mounting plate flush on ceiling (Y = 3.02 m)
+        op.addCylinder([x, CEIL_Y - 0.022, z], [x, CEIL_Y + 0.004, z], 0.058, 0.058, hiCol, 16);
+        // Vertical suspension drop rod from ceiling down to speaker yoke
+        const yokeTopY = Math.min(CEIL_Y - 0.02, y + 0.095);
+        if (CEIL_Y - yokeTopY > 0.02) {
+          op.addCylinder([x, yokeTopY, z], [x, CEIL_Y - 0.018, z], 0.011, 0.011, metalCol, 10);
+        }
+        // Articulated ceiling yoke / collar gripping the Dôme Flax from above
+        op.addCylinder([x, y + 0.065, z], [x, yokeTopY + 0.015, z], 0.028, 0.022, metalCol, 12);
+        // Iconic spherical aluminum dome body tilted downward toward MLP
+        op.addSphere(eq.pos, 0.088, darkBody, 10, 14);
+        const facePt = v3.add(eq.pos, v3.scale(dir, 0.068));
+        const coneTip = v3.add(eq.pos, v3.scale(dir, 0.082));
+        op.addCylinder(eq.pos, facePt, 0.086, 0.076, hiCol, 16);
+        op.addCylinder(facePt, coneTip, 0.056, 0.048, flaxCone, 14);
+        if (isSel) {
+          tr.addSphere(eq.pos, 0.16, [eq.colorRGB[0], eq.colorRGB[1], eq.colorRGB[2], 0.28], 8, 12, false);
+        }
+      } else if (eq.id === 'sub') {
+        // SVS SB-2000 / Pro (361 W × 371 H × 391 D mm)
+        const dir = v3.norm(v3.sub([eq.aim[0], y, eq.aim[2]], eq.pos));
+        const rotY = Math.atan2(dir[0], dir[2]);
+        // Cabinet body
+        op.addBox(x, y, z, 0.361, 0.371, 0.391, darkBody, rotY, true, hiCol);
+        // Highlighted trim rim
+        op.addBox(x, y, z, 0.372, 0.382, 0.04, hiCol, rotY, false);
+        // 12" (305 mm) high-excursion front driver facing dir
+        const drvBase = v3.add(eq.pos, v3.scale(dir, 0.195));
+        const drvTip  = v3.add(eq.pos, v3.scale(dir, 0.218));
+        op.addCylinder(drvBase, drvTip, 0.148, 0.125, [0.20, 0.22, 0.26, 1.0], 20, true, true, true);
+        op.addCylinder(drvTip, v3.add(drvTip, v3.scale(dir, 0.012)), 0.052, 0.045, hiCol, 14);
+        // Acoustic bass pressure rings around subwoofer when cones enabled or selected
+        if (state.showCones || isSel) {
+          for (const rad of [0.42, 0.72]) {
+            tr.addCylinder([x, y - 0.16, z], [x, y - 0.14, z], rad, rad, [eq.colorRGB[0], eq.colorRGB[1], eq.colorRGB[2], isSel ? 0.30 : 0.14], 24, false, true, true, false);
+          }
+        }
+      } else if (eq.id === 'tr' || eq.id === 'tl') {
+        // Ceiling Atmos round speaker (Ø 244 mm, depth 105 mm recessed above CEIL_Y)
+        op.addCylinder([x, CEIL_Y, z], [x, CEIL_Y + 0.105, z], 0.108, 0.095, darkBody, 18); // rear back-can above ceiling
+        op.addCylinder([x, CEIL_Y - 0.018, z], [x, CEIL_Y + 0.004, z], 0.128, 0.128, hiCol, 20); // outer flange bezel
+        op.addCylinder([x, CEIL_Y - 0.022, z], [x, CEIL_Y - 0.015, z], 0.088, 0.082, flaxCone, 16); // flax woofer visible from below
+        op.addCylinder([x, CEIL_Y - 0.028, z], [x, CEIL_Y - 0.020, z], 0.026, 0.022, darkBody, 12); // coaxial tweeter
+        if (isSel) {
+          tr.addSphere([x, CEIL_Y - 0.02, z], 0.20, [eq.colorRGB[0], eq.colorRGB[1], eq.colorRGB[2], 0.25], 8, 12, false);
+        }
+      } else if (eq.id === 'sr' || eq.id === 'sl') {
+        // Focal 300 ICW6 (Ø 244 mm, mounting depth 105 mm) recessed into 12 cm doublage!
+        const inward = eq.id === 'sr' ? [0, 0, 1] : [-sOut[0], 0, -sOut[2]];
+        const backPt = v3.add(eq.pos, v3.scale(inward, -0.105)); // 10.5 cm inside 12 cm doublage!
+        const frontPt = v3.add(eq.pos, v3.scale(inward, 0.016));
+        const drvPt = v3.add(eq.pos, v3.scale(inward, 0.022));
+        // Rear chassis recessed into the 12 cm doublage (visible in X-ray mode!)
+        op.addCylinder(backPt, eq.pos, 0.096, 0.108, darkBody, 18, true, true, true);
+        // Highlighted circular bezel on wall surface
+        op.addCylinder(eq.pos, frontPt, 0.126, 0.126, hiCol, 20);
+        // 6.5" Flax cone + coaxial tweeter
+        op.addCylinder(frontPt, drvPt, 0.086, 0.078, flaxCone, 16);
+        op.addCylinder(drvPt, v3.add(drvPt, v3.scale(inward, 0.010)), 0.026, 0.020, darkBody, 12);
+        if (isSel) {
+          tr.addSphere(eq.pos, 0.20, [eq.colorRGB[0], eq.colorRGB[1], eq.colorRGB[2], 0.26], 8, 12, false);
+        }
+      } else if (eq.id === 'proj') {
+        // Sony VPL-XW6100 (460 W × 210 H × 517 D mm), lens facing -X toward screen
+        // Main chassis (X = 5.24..5.76, Y = 1.22..1.43, Z = 2.46..2.92)
+        op.addBox(x, y, z, 0.517, 0.210, 0.460, [0.13, 0.14, 0.17, 1.0], 0, true, hiCol);
+        // Top accent stripe & cooling vents
+        op.addBox(x, y + 0.108, z, 0.48, 0.008, 0.42, hiCol, 0, false);
+        // Feet
+        for (const [fx, fz] of [[-0.20,-0.17],[0.20,-0.17],[-0.20,0.17],[0.20,0.17]]) {
+          op.addCylinder([x+fx, y-0.118, z+fz], [x+fx, y-0.105, z+fz], 0.025, 0.025, darkBody, 8);
+        }
+        // Iconic central ACF glass lens protruding slightly on -X face
+        op.addCylinder([x - 0.258, y, z], [x - 0.292, y, z], 0.068, 0.064, [0.22, 0.24, 0.28, 1.0], 18);
+        op.addCylinder([x - 0.292, y, z], [x - 0.298, y, z], 0.052, 0.050, [0.45, 0.72, 0.98, 1.0], 16);
+      }
+
+      // ---------------------------------------------------------------------
+      // H. ACOUSTIC DISPERSION CONES & SIGHTLINES TO MLP
+      // ---------------------------------------------------------------------
+      if (state.showCones && eq.id !== 'proj' && eq.id !== 'sub') {
+        const coneCol = [eq.colorRGB[0], eq.colorRGB[1], eq.colorRGB[2], isSel ? 0.26 : 0.11];
+        const rayCol  = [eq.colorRGB[0], eq.colorRGB[1], eq.colorRGB[2], isSel ? 0.88 : 0.42];
+        const dir = v3.norm(v3.sub(eq.aim, eq.pos));
+        const dist = v3.len(v3.sub(eq.aim, eq.pos));
+        const coneLen = Math.min(dist * 0.72, eq.id === 'tr' || eq.id === 'tl' ? 1.85 : 2.20);
+        const endPt = v3.add(eq.pos, v3.scale(dir, coneLen));
+        const endRad = coneLen * (eq.id === 'tr' || eq.id === 'tl' ? 0.42 : 0.30);
+        tr.addCylinder(eq.pos, endPt, 0.06, endRad, coneCol, 18, false, false, false, false);
+        op.addEdge(eq.pos, eq.aim, rayCol);
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // I. SONY VPL-XW6100 VOLUMETRIC PROJECTION BEAM FRUSTUM
+    // -----------------------------------------------------------------------
+    if (state.showBeam && state.screenProgress > 0.1) {
+      const lens = [5.235, DINING_Y + 0.82 + 0.105, 2.69]; // exact lens front inside 60 cm hood at +82 cm
+      const spCur = state.screenProgress;
+      const botBarY = CEIL_Y - (CEIL_Y - 0.86) * spCur;
+      const imgBot = Math.max(botBarY + 0.085, 0.945);
+      const imgTop = Math.min(CEIL_Y - 0.05, imgBot + 1.63);
+      const cTL = [0.262, imgTop, 1.22];
+      const cTR = [0.262, imgTop, 4.12];
+      const cBR = [0.262, imgBot, 4.12];
+      const cBL = [0.262, imgBot, 1.22];
+      const isProjSel = state.selectedId === 'proj';
+      const beamCol = [0.85, 0.35, 0.96, isProjSel ? 0.18 : 0.085];
+      const beamEdge = [0.88, 0.40, 0.98, isProjSel ? 0.90 : 0.55];
+      // 4 pyramid faces
+      tr.addTri(lens, cTL, cTR, beamCol, null, false);
+      tr.addTri(lens, cTR, cBR, beamCol, null, false);
+      tr.addTri(lens, cBR, cBL, beamCol, null, false);
+      tr.addTri(lens, cBL, cTL, beamCol, null, false);
+      // 4 sharp projection rays
+      for (const corner of [cTL, cTR, cBR, cBL]) {
+        op.addEdge(lens, corner, beamEdge);
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // J. ARCHITECTURAL DIMENSION GUIDE LINES (when labels enabled)
+    // -----------------------------------------------------------------------
+    if (state.showLabels) {
+      const dimCol = [0.95, 0.45, 0.15, 0.75];
+      const addHeightCote = (cx, cz, h, col, tickAxis = 'x') => {
+        op.addEdge([cx, 0.01, cz], [cx, h, cz], col);
+        const dt = 0.07;
+        for (const ty of [0.01, h]) {
+          if (tickAxis === 'x') op.addEdge([cx - dt, ty, cz], [cx + dt, ty, cz], col);
+          else op.addEdge([cx, ty, cz - dt], [cx, ty, cz + dt], col);
+        }
+      };
+      // Screen bottom bar 86 cm vertical dimension line
+      addHeightCote(0.25, 4.25, 0.86, dimCol, 'z');
+      // Centrale 0.70 m height from floor
+      addHeightCote(0.05, 2.43, 0.70, [0.96, 0.62, 0.04, 0.88], 'z');
+      // FR 1.50 m height from floor & FL floor-clearance vertical guide
+      addHeightCote(0.14, 0.22, 1.50, [0.06, 0.65, 0.91, 0.88], 'z');
+      op.addEdge([0.28, 0.0, 6.95], [0.28, state.flHeight, 6.95], [0.01, 0.52, 0.78, 0.45]);
+      // SR & SL 1.30 m height verticals (measured from séjour floor Y = 0!)
+      addHeightCote(5.11, 0.05, 1.30, [0.96, 0.25, 0.37, 0.88], 'x');
+      addHeightCote(5.11, zSouth(5.11) - 0.05, 1.30, [0.88, 0.11, 0.28, 0.88], 'x');
+      // Step height 52 cm marker
+      op.addEdge([5.24, 0.0, 6.00], [5.24, DINING_Y, 6.00], dimCol);
+    }
+
+    lastObjSource = op;
+    return { op, tr };
+  }
+
+  // =========================================================================
+  // 5. WEBGL1 HARDWARE-ACCELERATED SHADER ENGINE
+  // =========================================================================
+  const canvas = document.getElementById('gl-canvas');
+  const gl = canvas.getContext('webgl', { antialias: true, alpha: false, preserveDrawingBuffer: false });
+  if (!gl) {
+    document.getElementById('viewport-wrap').innerHTML =
+      '<div class="p-6 text-sm">WebGL n\'est pas disponible dans ce navigateur.</div>';
+    return;
+  }
+
+  const VS_MESH = `
+    attribute vec3 aPos;
+    attribute vec3 aNor;
+    attribute vec4 aCol;
+    uniform mat4 uMVP;
+    varying vec3 vNor;
+    varying vec3 vWorldPos;
+    varying vec4 vCol;
+    void main() {
+      vWorldPos = aPos;
+      vNor = aNor;
+      vCol = aCol;
+      gl_Position = uMVP * vec4(aPos, 1.0);
+    }
+  `;
+  const FS_MESH = `
+    precision mediump float;
+    varying vec3 vNor;
+    varying vec3 vWorldPos;
+    varying vec4 vCol;
+    uniform vec3 uCamPos;
+    uniform float uLightMode;
+    void main() {
+      vec3 N = normalize(vNor);
+      if (!gl_FrontFacing) N = -N;
+      // Architectural 3-point + hemisphere illumination
+      vec3 L1 = normalize(vec3(-0.55, 0.85, 0.45)); // warm SW daylight key
+      vec3 L2 = normalize(vec3(0.65, 0.45, -0.55)); // cool NE fill
+      float d1 = max(dot(N, L1), 0.0);
+      float d2 = max(dot(N, L2), 0.0);
+      float hemi = N.y * 0.5 + 0.5;
+      vec3 amb = mix(vec3(0.32, 0.31, 0.30), vec3(0.50, 0.52, 0.56), hemi);
+      if (uLightMode > 0.5) amb *= 1.12;
+      vec3 V = normalize(uCamPos - vWorldPos);
+      vec3 H = normalize(L1 + V);
+      float spec = pow(max(dot(N, H), 0.0), 36.0) * 0.14;
+      vec3 lit = vCol.rgb * (amb + d1 * 0.54 * vec3(1.0, 0.97, 0.92) + d2 * 0.24 * vec3(0.88, 0.93, 1.0)) + vec3(spec);
+      gl_FragColor = vec4(lit, vCol.a);
+    }
+  `;
+
+  const VS_LINE = `
+    attribute vec3 aPos;
+    attribute vec4 aCol;
+    uniform mat4 uMVP;
+    varying vec4 vCol;
+    void main() {
+      vCol = aCol;
+      gl_Position = uMVP * vec4(aPos, 1.0);
+    }
+  `;
+  const FS_LINE = `
+    precision mediump float;
+    varying vec4 vCol;
+    void main() {
+      gl_FragColor = vCol;
+    }
+  `;
+
+  function compileShader(type, src) {
+    const sh = gl.createShader(type);
+    gl.shaderSource(sh, src);
+    gl.compileShader(sh);
+    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+      console.error('Shader error:', gl.getShaderInfoLog(sh));
+    }
+    return sh;
+  }
+  function createProgram(vs, fs) {
+    const p = gl.createProgram();
+    gl.attachShader(p, compileShader(gl.VERTEX_SHADER, vs));
+    gl.attachShader(p, compileShader(gl.FRAGMENT_SHADER, fs));
+    gl.linkProgram(p);
+    return p;
+  }
+
+  const progMesh = createProgram(VS_MESH, FS_MESH);
+  const locMesh = {
+    aPos: gl.getAttribLocation(progMesh, 'aPos'),
+    aNor: gl.getAttribLocation(progMesh, 'aNor'),
+    aCol: gl.getAttribLocation(progMesh, 'aCol'),
+    uMVP: gl.getUniformLocation(progMesh, 'uMVP'),
+    uCamPos: gl.getUniformLocation(progMesh, 'uCamPos'),
+    uLightMode: gl.getUniformLocation(progMesh, 'uLightMode')
+  };
+
+  const progLine = createProgram(VS_LINE, FS_LINE);
+  const locLine = {
+    aPos: gl.getAttribLocation(progLine, 'aPos'),
+    aCol: gl.getAttribLocation(progLine, 'aCol'),
+    uMVP: gl.getUniformLocation(progLine, 'uMVP')
+  };
+
+  function uploadBuffers(acc) {
+    const makeBuf = (arr) => {
+      const b = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, b);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(arr), gl.STATIC_DRAW);
+      return b;
+    };
+    return {
+      triCount: acc.pos.length / 3,
+      edgeCount: acc.edgePos.length / 3,
+      bPos: makeBuf(acc.pos),
+      bNor: makeBuf(acc.nor),
+      bCol: makeBuf(acc.col),
+      bEPos: makeBuf(acc.edgePos),
+      bECol: makeBuf(acc.edgeCol)
+    };
+  }
+  function freeBuffers(g) {
+    if (!g) return;
+    gl.deleteBuffer(g.bPos); gl.deleteBuffer(g.bNor); gl.deleteBuffer(g.bCol);
+    gl.deleteBuffer(g.bEPos); gl.deleteBuffer(g.bECol);
+  }
+
+  // Subtle architectural ground grid buffer
+  let gridBuf = null;
+  function buildGridBuffer() {
+    const pos = [], col = [];
+    const gc = state.isLight ? [0.60, 0.63, 0.68, 0.25] : [0.36, 0.40, 0.48, 0.22];
+    const y = -0.245;
+    for (let x = -4; x <= 13; x += 1) {
+      pos.push(x, y, -2, x, y, 10);
+      col.push(...gc, ...gc);
+    }
+    for (let z = -2; z <= 10; z += 1) {
+      pos.push(-4, y, z, 13, y, z);
+      col.push(...gc, ...gc);
+    }
+    if (gridBuf) { gl.deleteBuffer(gridBuf.bPos); gl.deleteBuffer(gridBuf.bCol); }
+    const bPos = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, bPos);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(pos), gl.STATIC_DRAW);
+    const bCol = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, bCol);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(col), gl.STATIC_DRAW);
+    gridBuf = { count: pos.length / 3, bPos, bCol };
+  }
+
+  function rebuildGeometry() {
+    freeBuffers(cachedOpaque);
+    freeBuffers(cachedTrans);
+    const { op, tr } = buildSceneMeshes();
+    cachedOpaque = uploadBuffers(op);
+    cachedTrans  = uploadBuffers(tr);
+  }
+
+  // =========================================================================
+  // 6. CAMERA CONTROLLER & SMOOTH ANIMATED PRESETS
+  // =========================================================================
+  const cam = {
+    yaw: 0.72,       // radians around Y
+    pitch: 0.48,     // radians above horizon
+    dist: 12.2,
+    target: [4.2, 1.15, 3.3],
+    fov: 44 * Math.PI / 180
+  };
+  let camAnim = null;
+
+  const PRESETS = {
+    overview:  { yaw: 0.68,  pitch: 0.46, dist: 12.8, target: [4.00, 1.15, 3.40] },
+    mlp:       { yaw: 1.57,  pitch: 0.04, dist: 0.90, target: [3.85, 1.12, 2.68] },
+    section:   { yaw: 0.00,  pitch: 0.02, dist: 10.6, target: [3.65, 1.38, 2.80] },
+    top:       { yaw: 0.00,  pitch: 1.53, dist: 16.2, target: [3.60, 0.50, 3.60] },
+    front:     { yaw: 1.56,  pitch: 0.14, dist: 7.90, target: [0.20, 1.35, 3.65] },
+    surrounds: { yaw: 0.72,  pitch: 0.18, dist: 3.40, target: [5.11, 1.30, 0.05] },
+    rear:      { yaw: -1.12, pitch: 0.26, dist: 4.10, target: [5.45, 1.18, 2.25] }
+  };
+
+  function animateCameraTo(dst, ms = 520) {
+    // Shortest angular path for yaw
+    let dy = dst.yaw - cam.yaw;
+    while (dy > Math.PI) dy -= Math.PI * 2;
+    while (dy < -Math.PI) dy += Math.PI * 2;
+    camAnim = {
+      t0: performance.now(),
+      dur: ms,
+      src: { yaw: cam.yaw, pitch: cam.pitch, dist: cam.dist, target: [...cam.target] },
+      dst: { yaw: cam.yaw + dy, pitch: dst.pitch, dist: dst.dist, target: [...dst.target] }
+    };
+  }
+
+  function getCamEye() {
+    const cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
+    const cy = Math.cos(cam.yaw),   sy = Math.sin(cam.yaw);
+    return [
+      cam.target[0] + cam.dist * cp * sy,
+      cam.target[1] + cam.dist * sp,
+      cam.target[2] + cam.dist * cp * cy
+    ];
+  }
+
+  // Pointer orbit / pan / zoom
+  const viewportEl = document.getElementById('viewport-wrap');
+  let dragMode = null;
+  let lastPtr = { x: 0, y: 0 };
+  let pinchDist = 0;
+
+  viewportEl.addEventListener('contextmenu', (e) => e.preventDefault());
+  viewportEl.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('.pin-3d') || e.target.closest('button') || e.target.closest('label')) return;
+    camAnim = null;
+    dragMode = (e.button === 2 || e.shiftKey) ? 'pan' : 'orbit';
+    lastPtr = { x: e.clientX, y: e.clientY };
+    viewportEl.setPointerCapture(e.pointerId);
+  });
+  viewportEl.addEventListener('pointermove', (e) => {
+    if (!dragMode) return;
+    const dx = e.clientX - lastPtr.x;
+    const dy = e.clientY - lastPtr.y;
+    lastPtr = { x: e.clientX, y: e.clientY };
+    if (dragMode === 'orbit') {
+      cam.yaw -= dx * 0.0065;
+      cam.pitch = Math.max(-0.22, Math.min(1.54, cam.pitch + dy * 0.0065));
+    } else {
+      const eye = getCamEye();
+      const fwd = v3.norm(v3.sub(cam.target, eye));
+      const right = v3.norm(v3.cross(fwd, [0, 1, 0]));
+      const up = v3.cross(right, fwd);
+      const speed = cam.dist * 0.0014;
+      cam.target = v3.add(cam.target, v3.add(v3.scale(right, -dx * speed), v3.scale(up, dy * speed)));
+    }
+  });
+  const endDrag = () => { dragMode = null; };
+  viewportEl.addEventListener('pointerup', endDrag);
+  viewportEl.addEventListener('pointercancel', endDrag);
+  viewportEl.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    camAnim = null;
+    const factor = Math.exp(e.deltaY * 0.0012);
+    cam.dist = Math.max(0.85, Math.min(28.0, cam.dist * factor));
+  }, { passive: false });
+
+  // Touch pinch-zoom
+  viewportEl.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 2) {
+      dragMode = null;
+      pinchDist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+    }
+  }, { passive: true });
+  viewportEl.addEventListener('touchmove', (e) => {
+    if (e.touches.length === 2 && pinchDist > 0) {
+      const d = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      cam.dist = Math.max(0.85, Math.min(28.0, cam.dist * (pinchDist / d)));
+      pinchDist = d;
+    }
+  }, { passive: true });
+
+  // =========================================================================
+  // 7. 3D PROJECTED HTML PINS & DIMENSION LABELS
+  // =========================================================================
+  const labelsLayer = document.getElementById('labels-layer');
+  const pinEls = new Map();
+  const dimEls = [];
+
+  const DIM_MARKERS = [
+    { id: 'd_scr86',      pos: [0.25, 0.36, 4.30], text: 'Bas écran 86 cm' },
+    { id: 'd_step',       pos: [5.24, 0.28, 6.08], text: 'Marche +52 cm' },
+    { id: 'd_h_centrale', pos: [0.06, 0.34, 2.43], text: '↕ 0,70 m', color: '#f59e0b' },
+    { id: 'd_h_fr',       pos: [0.16, 0.52, 0.24], text: '↕ 1,50 m', color: '#0ea5e9' },
+    { id: 'd_h_sr',       pos: [5.11, 0.88, 0.08], text: '↕ 1,30 m', color: '#f43f5e' },
+    { id: 'd_h_sl',       pos: [5.11, 0.88, zSouth(5.11)-0.08], text: '↕ 1,30 m', color: '#e11d48' }
+  ];
+
+  function initPins() {
+    labelsLayer.innerHTML = '';
+    pinEls.clear();
+    dimEls.length = 0;
+
+    for (const eq of EQUIPMENT_BASE) {
+      const el = document.createElement('button');
+      el.type = 'button';
+      el.className = 'pin-3d flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-semibold shadow border';
+      el.style.backgroundColor = 'var(--card)';
+      el.style.borderColor = eq.colorHex;
+      el.style.color = 'var(--foreground)';
+      el.innerHTML = `<span class="w-2 h-2 rounded-full shrink-0" style="background:${eq.colorHex}"></span><span>${eq.short}</span>`;
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        selectEquipment(eq.id, false);
+      });
+      labelsLayer.appendChild(el);
+      pinEls.set(eq.id, el);
+    }
+
+    for (const dm of DIM_MARKERS) {
+      const el = document.createElement('div');
+      el.className = 'dim-3d px-1.5 py-0.5 rounded text-xs font-mono border ' +
+        (dm.color ? 'font-semibold text-[var(--foreground)] shadow-sm' : 'border-[var(--border)] text-[var(--muted-foreground)]');
+      if (dm.color) el.style.borderColor = dm.color;
+      el.textContent = dm.text;
+      labelsLayer.appendChild(el);
+      dimEls.push({ ...dm, el });
+    }
+  }
+
+  function updatePins(mvp, w, h) {
+    if (!state.showLabels) {
+      labelsLayer.style.display = 'none';
+      return;
+    }
+    labelsLayer.style.display = 'block';
+    const eqList = getEquipmentList();
+    for (const eq of eqList) {
+      const el = pinEls.get(eq.id);
+      if (!el) continue;
+      const offsetY = (eq.id === 'tr' || eq.id === 'tl') ? -0.14 : (eq.id === 'proj' ? 0.27 : 0.20);
+      const p = projectPoint([eq.pos[0], eq.pos[1] + offsetY, eq.pos[2]], mvp, w, h);
+      if (!p || p.x < -40 || p.x > w + 40 || p.y < -20 || p.y > h + 20) {
+        el.style.display = 'none';
+      } else {
+        el.style.display = 'flex';
+        el.style.left = p.x.toFixed(1) + 'px';
+        el.style.top  = p.y.toFixed(1) + 'px';
+        el.classList.toggle('active', state.selectedId === eq.id);
+      }
+    }
+    for (const dm of dimEls) {
+      const p = projectPoint(dm.pos, mvp, w, h);
+      if (!p || p.x < 0 || p.x > w || p.y < 0 || p.y > h) {
+        dm.el.style.display = 'none';
+      } else {
+        dm.el.style.display = 'block';
+        dm.el.style.left = p.x.toFixed(1) + 'px';
+        dm.el.style.top  = p.y.toFixed(1) + 'px';
+      }
+    }
+  }
+
+  // =========================================================================
+  // 8. INSPECTOR & EQUIPMENT LIST UI
+  // =========================================================================
+  function computeAcoustics(eq) {
+    const dx = eq.pos[0] - MLP[0];
+    const dy = eq.pos[1] - MLP[1];
+    const dz = eq.pos[2] - MLP[2];
+    const dist = Math.hypot(dx, dy, dz);
+    const az = Math.atan2(dz, -dx) * 180 / Math.PI; // 0 = screen, + = left (South), - = right (North)
+    const el = Math.atan2(dy, Math.hypot(dx, dz)) * 180 / Math.PI;
+    return { dist, az, el };
+  }
+
+  function renderEquipmentList() {
+    const listEl = document.getElementById('equipment-list');
+    const eqList = getEquipmentList();
+    listEl.innerHTML = '';
+    for (const eq of eqList) {
+      const isSel = state.selectedId === eq.id;
+      const ac = computeAcoustics(eq);
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'w-full text-left px-2.5 py-2 rounded-md border transition flex items-center justify-between gap-2 text-xs ' +
+        (isSel
+          ? 'bg-[var(--secondary)] border-[var(--primary)]'
+          : 'bg-[var(--background)] border-[var(--border)] hover:bg-[var(--secondary)]');
+      btn.innerHTML = `
+        <div class="flex items-center gap-2 min-w-0">
+          <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${eq.colorHex}"></span>
+          <div class="min-w-0">
+            <div class="font-semibold truncate">${eq.short} · ${eq.name}</div>
+            <div class="text-[var(--muted-foreground)] truncate">${eq.model}</div>
+          </div>
+        </div>
+        <span class="font-mono text-[var(--muted-foreground)] shrink-0">${eq.id === 'proj' ? '5,00 m' : ac.dist.toFixed(2) + ' m'}</span>
+      `;
+      btn.addEventListener('click', () => selectEquipment(eq.id, false));
+      btn.addEventListener('dblclick', () => selectEquipment(eq.id, true));
+      listEl.appendChild(btn);
+    }
+  }
+
+  function updateInspector() {
+    const eq = getEquipmentList().find((e) => e.id === state.selectedId);
+    if (!eq) return;
+    const ac = computeAcoustics(eq);
+    document.getElementById('insp-dot').style.backgroundColor = eq.colorHex;
+    document.getElementById('insp-title').textContent = `${eq.short} — ${eq.name}`;
+    document.getElementById('insp-model').textContent = eq.model;
+    document.getElementById('btn-focus-selected').classList.remove('hidden');
+
+    const metricsEl = document.getElementById('insp-metrics');
+    if (eq.id === 'proj') {
+      metricsEl.innerHTML = `
+        <div class="p-1.5 rounded bg-[var(--card)] border border-[var(--border)]">
+          <div class="text-[var(--muted-foreground)]">Hauteur objectif</div>
+          <div class="font-mono font-semibold">1,445 m (base 82 cm)</div>
+        </div>
+        <div class="p-1.5 rounded bg-[var(--card)] border border-[var(--border)]">
+          <div class="text-[var(--muted-foreground)]">Recul / Ratio</div>
+          <div class="font-mono font-semibold">5,00 m · 1,72:1</div>
+        </div>
+        <div class="p-1.5 rounded bg-[var(--card)] border border-[var(--border)] col-span-2">
+          <div class="text-[var(--muted-foreground)]">Intégration · Dimensions</div>
+          <div class="font-mono font-medium">Caisson bois 60 cm · ouverture avant</div>
+          <div class="font-mono text-[var(--muted-foreground)]">${eq.dims}</div>
+        </div>
+      `;
+    } else {
+      const azStr = (ac.az >= 0 ? '+' : '') + ac.az.toFixed(1) + '°';
+      const elStr = (ac.el >= 0 ? '+' : '') + ac.el.toFixed(1) + '°';
+      metricsEl.innerHTML = `
+        <div class="p-1.5 rounded bg-[var(--card)] border border-[var(--border)]">
+          <div class="text-[var(--muted-foreground)]">Distance écoute</div>
+          <div class="font-mono font-semibold">${ac.dist.toFixed(2)} m</div>
+        </div>
+        <div class="p-1.5 rounded bg-[var(--card)] border border-[var(--border)]">
+          <div class="text-[var(--muted-foreground)]">Azimut / Élév.</div>
+          <div class="font-mono font-semibold">${azStr} / ${elStr}</div>
+        </div>
+        <div class="p-1.5 rounded bg-[var(--card)] border border-[var(--border)] col-span-2">
+          <div class="text-[var(--muted-foreground)]">Hauteur · Dimensions</div>
+          <div class="font-mono font-medium">${eq.heightLabel}</div>
+          <div class="font-mono text-[var(--muted-foreground)]">${eq.dims}</div>
+        </div>
+      `;
+    }
+    document.getElementById('insp-note').textContent = eq.note;
+  }
+
+  function focusOnEquipment(eq) {
+    let yaw = 0.65, pitch = 0.25, dist = 3.6;
+    if (eq.id === 'centrale') { yaw = 1.45; pitch = 0.14; dist = 3.2; }
+    else if (eq.id === 'fr')  { yaw = 0.90; pitch = 0.18; dist = 3.0; }
+    else if (eq.id === 'fl')  { yaw = 2.15; pitch = 0.18; dist = 3.0; }
+    else if (eq.id === 'sr')  { yaw = 0.70; pitch = 0.16; dist = 2.6; }
+    else if (eq.id === 'sl')  { yaw = 2.45; pitch = 0.16; dist = 2.8; }
+    else if (eq.id === 'tr' || eq.id === 'tl') { yaw = 0.72; pitch = 0.42; dist = 4.4; }
+    else if (eq.id === 'sub') {
+      if (state.subMode === 'rear_bench_north') { yaw = 1.42; pitch = 0.28; dist = 1.85; }
+      else if (state.subMode === 'rear_bench')  { yaw = -1.18; pitch = 0.26; dist = 2.9; }
+      else { yaw = 0.35; pitch = 0.26; dist = 2.9; }
+    }
+    else if (eq.id === 'proj') { yaw = -1.15; pitch = 0.22; dist = 2.7; }
+    animateCameraTo({ yaw, pitch, dist, target: [...eq.pos] }, 480);
+  }
+
+  function selectEquipment(id, moveCamera = false) {
+    state.selectedId = id;
+    rebuildGeometry();
+    renderEquipmentList();
+    updateInspector();
+    if (moveCamera) {
+      const eq = getEquipmentList().find((e) => e.id === id);
+      if (eq) focusOnEquipment(eq);
+    }
+  }
+
+  // =========================================================================
+  // 9. WAVEFRONT .OBJ EXPORTER
+  // =========================================================================
+  function exportOBJ() {
+    if (!lastObjSource) return;
+    let out = '# Modele 3D Piece de vie Home Cinema (echelle metres, Y=haut)\n';
+    let vIdx = 1;
+    for (const [grp, tris] of Object.entries(lastObjSource.objGroups)) {
+      if (!tris.length) continue;
+      out += `o ${grp}\n`;
+      for (const [a, b, c] of tris) {
+        out += `v ${a[0].toFixed(4)} ${a[1].toFixed(4)} ${a[2].toFixed(4)}\n`;
+        out += `v ${b[0].toFixed(4)} ${b[1].toFixed(4)} ${b[2].toFixed(4)}\n`;
+        out += `v ${c[0].toFixed(4)} ${c[1].toFixed(4)} ${c[2].toFixed(4)}\n`;
+        out += `f ${vIdx} ${vIdx+1} ${vIdx+2}\n`;
+        vIdx += 3;
+      }
+    }
+    const blob = new Blob([out], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'home_cinema_salon_3d.obj';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  // =========================================================================
+  // 10. UI EVENT BINDINGS & LIVE THEME SYNC
+  // =========================================================================
+  function syncTheme() {
+    const isLight = document.documentElement.classList.contains('light');
+    state.isLight = isLight;
+    buildGridBuffer();
+  }
+  window.addEventListener('themechange', syncTheme);
+
+  // Camera preset buttons
+  document.querySelectorAll('.cam-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.preset;
+      if (!PRESETS[key]) return;
+      document.querySelectorAll('.cam-btn').forEach((b) => {
+        b.classList.remove('bg-[var(--primary)]', 'text-[var(--primary-foreground)]', 'font-medium');
+        b.classList.add('bg-[var(--background)]');
+      });
+      btn.classList.remove('bg-[var(--background)]');
+      btn.classList.add('bg-[var(--primary)]', 'text-[var(--primary-foreground)]', 'font-medium');
+
+      let needRebuild = false;
+      // Clean South facade cutaway in architectural Coupe (section) mode!
+      const wantCutSouth = (key === 'section');
+      if (state.cutSouth !== wantCutSouth) {
+        state.cutSouth = wantCutSouth;
+        document.getElementById('opt-cutsouth').checked = wantCutSouth;
+        needRebuild = true;
+      }
+      // Auto-enable X-ray when clicking "Surrounds 12 cm" to inspect 10.5cm speaker in 12cm wall!
+      if (key === 'surrounds') {
+        if (!state.xray) {
+          state.xray = true;
+          document.getElementById('opt-xray').checked = true;
+          needRebuild = true;
+        }
+        state.selectedId = 'sr';
+        renderEquipmentList();
+        updateInspector();
+        needRebuild = true;
+      }
+      if (needRebuild) rebuildGeometry();
+      animateCameraTo(PRESETS[key], 550);
+    });
+  });
+
+  document.getElementById('opt-xray').addEventListener('change', (e) => {
+    state.xray = e.target.checked;
+    rebuildGeometry();
+  });
+  document.getElementById('opt-cutsouth').addEventListener('change', (e) => {
+    state.cutSouth = e.target.checked;
+    rebuildGeometry();
+  });
+  document.getElementById('opt-ceiling').addEventListener('change', (e) => {
+    state.showCeiling = e.target.checked;
+    rebuildGeometry();
+  });
+  document.getElementById('opt-cones').addEventListener('change', (e) => {
+    state.showCones = e.target.checked;
+    rebuildGeometry();
+  });
+  document.getElementById('opt-beam').addEventListener('change', (e) => {
+    state.showBeam = e.target.checked;
+    rebuildGeometry();
+  });
+  document.getElementById('opt-screen').addEventListener('change', (e) => {
+    state.screenDown = e.target.checked;
+  });
+  document.getElementById('opt-labels').addEventListener('change', (e) => {
+    state.showLabels = e.target.checked;
+    rebuildGeometry();
+  });
+  document.getElementById('opt-viewer').addEventListener('change', (e) => {
+    state.showViewer = e.target.checked;
+    rebuildGeometry();
+  });
+
+  document.getElementById('sel-sub-pos').addEventListener('change', (e) => {
+    state.subMode = e.target.value;
+    document.getElementById('sub-pos-note').textContent = getSubConfig().note;
+    selectEquipment('sub', true);
+  });
+
+  document.getElementById('rng-fl-height').addEventListener('input', (e) => {
+    state.flHeight = parseFloat(e.target.value);
+    const dropCm = Math.round((CEIL_Y - state.flHeight) * 100);
+    document.getElementById('fl-height-readout').textContent =
+      `${state.flHeight.toFixed(2).replace('.', ',')} m · tige ${dropCm} cm`;
+    state.selectedId = 'fl';
+    rebuildGeometry();
+    renderEquipmentList();
+    updateInspector();
+  });
+
+  document.getElementById('btn-focus-selected').addEventListener('click', () => {
+    const eq = getEquipmentList().find((e) => e.id === state.selectedId);
+    if (eq) focusOnEquipment(eq);
+  });
+
+  document.getElementById('btn-export-obj').addEventListener('click', exportOBJ);
+
+  const sidebarEl = document.getElementById('sidebar');
+    const themeBtn = document.getElementById('btn-theme-toggle');
+  if (themeBtn) {
+    themeBtn.addEventListener('click', () => {
+      const nowLight = document.documentElement.classList.toggle('light');
+      themeBtn.textContent = nowLight ? '☾ Sombre' : '☀ Clair';
+      window.dispatchEvent(new Event('themechange'));
+    });
+  }
+  if (window.innerWidth < 768) {
+    sidebarEl.classList.add('hidden');
+  }
+
+  document.getElementById('btn-toggle-sidebar').addEventListener('click', () => {
+    sidebarEl.classList.toggle('hidden');
+  });
+
+  // =========================================================================
+  // 11. RENDER LOOP (60 FPS, Zero Z-Fighting, Crisp High-DPI)
+  // =========================================================================
+  function drawMeshBuffer(buf, mvp, eye) {
+    if (!buf || buf.triCount === 0) return;
+    gl.useProgram(progMesh);
+    gl.uniformMatrix4fv(locMesh.uMVP, false, mvp);
+    gl.uniform3fv(locMesh.uCamPos, eye);
+    gl.uniform1f(locMesh.uLightMode, state.isLight ? 1.0 : 0.0);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf.bPos);
+    gl.enableVertexAttribArray(locMesh.aPos);
+    gl.vertexAttribPointer(locMesh.aPos, 3, gl.FLOAT, false, 0, 0);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf.bNor);
+    gl.enableVertexAttribArray(locMesh.aNor);
+    gl.vertexAttribPointer(locMesh.aNor, 3, gl.FLOAT, false, 0, 0);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf.bCol);
+    gl.enableVertexAttribArray(locMesh.aCol);
+    gl.vertexAttribPointer(locMesh.aCol, 4, gl.FLOAT, false, 0, 0);
+
+    gl.drawArrays(gl.TRIANGLES, 0, buf.triCount);
+  }
+
+  function drawLineBuffer(bPos, bCol, count, mvp) {
+    if (!count) return;
+    gl.useProgram(progLine);
+    gl.uniformMatrix4fv(locLine.uMVP, false, mvp);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, bPos);
+    gl.enableVertexAttribArray(locLine.aPos);
+    gl.vertexAttribPointer(locLine.aPos, 3, gl.FLOAT, false, 0, 0);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, bCol);
+    gl.enableVertexAttribArray(locLine.aCol);
+    gl.vertexAttribPointer(locLine.aCol, 4, gl.FLOAT, false, 0, 0);
+
+    gl.drawArrays(gl.LINES, 0, count);
+  }
+
+  function resizeCanvas() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = viewportEl.clientWidth;
+    const h = viewportEl.clientHeight;
+    if (canvas.width !== Math.floor(w * dpr) || canvas.height !== Math.floor(h * dpr)) {
+      canvas.width = Math.max(1, Math.floor(w * dpr));
+      canvas.height = Math.max(1, Math.floor(h * dpr));
+    }
+    return { w, h };
+  }
+
+  function render(now) {
+    // Smooth camera preset easing
+    if (camAnim) {
+      const t = Math.min(1, (now - camAnim.t0) / camAnim.dur);
+      const e = 1 - Math.pow(1 - t, 3);
+      cam.yaw   = camAnim.src.yaw   + (camAnim.dst.yaw   - camAnim.src.yaw)   * e;
+      cam.pitch = camAnim.src.pitch + (camAnim.dst.pitch - camAnim.src.pitch) * e;
+      cam.dist  = camAnim.src.dist  + (camAnim.dst.dist  - camAnim.src.dist)  * e;
+      cam.target = [
+        camAnim.src.target[0] + (camAnim.dst.target[0] - camAnim.src.target[0]) * e,
+        camAnim.src.target[1] + (camAnim.dst.target[1] - camAnim.src.target[1]) * e,
+        camAnim.src.target[2] + (camAnim.dst.target[2] - camAnim.src.target[2]) * e
+      ];
+      if (t >= 1) camAnim = null;
+    }
+
+    // Smooth motorized screen drop/retract animation
+    const targetSp = state.screenDown ? 1.0 : 0.0;
+    if (Math.abs(state.screenProgress - targetSp) > 0.005) {
+      state.screenProgress += (targetSp - state.screenProgress) * 0.14;
+      if (Math.abs(state.screenProgress - targetSp) <= 0.008) state.screenProgress = targetSp;
+      rebuildGeometry();
+    }
+
+    const { w, h } = resizeCanvas();
+    gl.viewport(0, 0, canvas.width, canvas.height);
+
+    // Clear color synced to light/dark theme
+    if (state.isLight) {
+      gl.clearColor(0.95, 0.96, 0.97, 1.0);
+    } else {
+      gl.clearColor(0.08, 0.09, 0.12, 1.0);
+    }
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+    const eye = getCamEye();
+    const proj = mat4Perspective(cam.fov, Math.max(0.1, w / Math.max(1, h)), 0.1, 80.0);
+    const view = mat4LookAt(eye, cam.target, [0, 1, 0]);
+    const mvp  = mat4Mul(proj, view);
+
+    gl.enable(gl.DEPTH_TEST);
+    gl.depthFunc(gl.LEQUAL);
+
+    // 1. Ground reference grid
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    if (gridBuf) drawLineBuffer(gridBuf.bPos, gridBuf.bCol, gridBuf.count, mvp);
+
+    // 2. Opaque geometry (with polygon offset so edges never z-fight)
+    gl.disable(gl.BLEND);
+    gl.depthMask(true);
+    gl.enable(gl.POLYGON_OFFSET_FILL);
+    gl.polygonOffset(1.0, 1.0);
+    drawMeshBuffer(cachedOpaque, mvp, eye);
+    gl.disable(gl.POLYGON_OFFSET_FILL);
+
+    // 3. Architectural crisp edge lines + acoustic sightlines + projector rays
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    if (cachedOpaque) drawLineBuffer(cachedOpaque.bEPos, cachedOpaque.bECol, cachedOpaque.edgeCount, mvp);
+
+    // 4. Translucent geometry (glass, X-ray walls, acoustic cones, projector beam)
+    gl.depthMask(false);
+    drawMeshBuffer(cachedTrans, mvp, eye);
+    if (cachedTrans) drawLineBuffer(cachedTrans.bEPos, cachedTrans.bECol, cachedTrans.edgeCount, mvp);
+    gl.depthMask(true);
+
+    // 5. Update projected 3D labels
+    updatePins(mvp, w, h);
+
+    requestAnimationFrame(render);
+  }
+
+  // Initialize everything
+  syncTheme();
+  initPins();
+  rebuildGeometry();
+  renderEquipmentList();
+  updateInspector();
+  requestAnimationFrame(render);
+})();
+</script>
+</body>
+</html>
