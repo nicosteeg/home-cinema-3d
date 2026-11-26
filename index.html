@@ -192,7 +192,7 @@
 
     <!-- Right Inspector Sidebar -->
     <aside id="sidebar" class="w-80 shrink-0 bg-[var(--card)] border-l border-[var(--border)] flex flex-col min-h-0 overflow-hidden transition-all">
-      <!-- Subwoofer & FL Suspension Controls -->
+      <!-- Subwoofer, Surrounds & FL Suspension Controls -->
       <div class="p-3 border-b border-[var(--border)] space-y-2.5">
         <div class="space-y-1.5">
           <div class="flex items-center justify-between">
@@ -207,6 +207,16 @@
           <p id="sub-pos-note" class="text-xs text-[var(--muted-foreground)] leading-snug">
             Niche intégrée à l'extrémité Nord du meuble bois derrière le canapé (prof. 50 cm), ouverte vers le Nord / angle fenêtre M 07.
           </p>
+        </div>
+
+        <div class="pt-2 border-t border-[var(--border)] space-y-1.5">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">Surrounds (SR / SL)</span>
+          </div>
+          <select id="sel-surr-pos" class="w-full text-xs px-2 py-1.5 rounded border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] focus:outline-none">
+            <option value="walls_icw6" selected>Murs doublage 12 cm · Focal 300 ICW6 (Ø 24 cm)</option>
+            <option value="meuble_icw4">Meuble arrière canapé · Focal 300 ICW4 (Ø 19 cm)</option>
+          </select>
         </div>
 
         <div class="pt-2 border-t border-[var(--border)] space-y-1">
@@ -248,7 +258,7 @@
             <div class="flex justify-between"><span class="text-[var(--muted-foreground)]">Distance projection</span><span class="font-mono font-medium">5,00 m (ratio 1,72:1)</span></div>
             <div class="flex justify-between"><span class="text-[var(--muted-foreground)]">Lens Shift Sony V</span><span class="font-mono font-medium">+19 % (max ±85 %)</span></div>
             <div class="flex justify-between"><span class="text-[var(--muted-foreground)]">Caisson proj. (L × H)</span><span class="font-mono font-medium">60 cm × base 82 cm</span></div>
-            <div class="flex justify-between"><span class="text-[var(--muted-foreground)]">Doublage SR / SL</span><span class="font-mono font-medium">12 cm (encastr. 10,5 cm)</span></div>
+            <div class="flex justify-between"><span class="text-[var(--muted-foreground)]">Surrounds SR / SL</span><span id="summary-surr" class="font-mono font-medium">300 ICW6 · mur 12 cm</span></div>
           </div>
         </div>
       </div>
@@ -412,6 +422,7 @@
   const state = {
     selectedId: 'proj',
     subMode: 'rear_bench_north', // 'rear_bench_north' | 'rear_bench' | 'north_bench' | 'plan_orig'
+    surrMode: 'walls_icw6',      // 'walls_icw6' | 'meuble_icw4'
     flHeight: 2.20,              // ceiling-suspended FL height above séjour floor (1.50..2.88 m)
     xray: false,
     cutSouth: false,
@@ -424,6 +435,22 @@
     showViewer: true,
     isLight: false
   };
+
+  function getSurroundConfig(id) {
+    if (state.surrMode === 'meuble_icw4') {
+      const isSR = (id === 'sr');
+      return {
+        model: 'Focal 300 ICW4 (encastrée meuble)',
+        pos: [5.24, 1.06, isSR ? 1.05 : 4.31], // flush on West front face of rear wooden meuble (entraxe 3.26 m)
+        aim: MLP,
+        dims: 'Ø 192 mm × prof. 93 mm (découpe Ø 163)',
+        heightLabel: '1,06 m du sol séjour (+54 cm sur SàM)',
+        targetAz: isSR ? '-90° à -110°' : '+90° à +110°',
+        note: 'Encastrée en façade du meuble bois arrière (au-dessus du dossier 79 cm, entraxe 3,26 m) : symétrie gauche/droite parfaite (1,73 m, ±110° Dolby) et aucune contrainte de profondeur (93 mm dans 50 cm de meuble, charge close possible). Proche des places extrêmes du canapé (~0,7–0,9 m).'
+      };
+    }
+    return null; // use baseline Focal 300 ICW6 wall config from EQUIPMENT_BASE
+  }
 
   function getSubConfig() {
     if (state.subMode === 'rear_bench_north') {
@@ -463,6 +490,10 @@
       if (item.id === 'sub') {
         const cfg = getSubConfig();
         return { ...item, ...cfg };
+      }
+      if (item.id === 'sr' || item.id === 'sl') {
+        const scfg = getSurroundConfig(item.id);
+        if (scfg) return { ...item, ...scfg };
       }
       if (item.id === 'fl') {
         const dropCm = Math.round((CEIL_Y - state.flHeight) * 100);
@@ -983,6 +1014,8 @@
     const hoodTarget = xray ? tr : op;
     const woodHood = xray ? [0.69, 0.51, 0.34, 0.30] : C.woodWarm;
     const woodHoodDark = xray ? [0.52, 0.37, 0.23, 0.32] : C.woodDark;
+    const wingTarget = (xray && state.surrMode === 'meuble_icw4') ? tr : op;
+    const woodWing = (xray && state.surrMode === 'meuble_icw4') ? [0.69, 0.51, 0.34, 0.28] : C.woodWarm;
 
     // Continuous front apron behind sofa (X = 5.24..5.29, Y = 0.18..0.52, Z = 0.30..5.31)
     op.addBox(5.265, (STEP_Y + DINING_Y)/2, 2.805, 0.05, DINING_Y - STEP_Y, 5.01, C.woodDark, 0, true);
@@ -995,9 +1028,9 @@
       op.addBox(5.71, 0.77, 0.33,  0.06, 0.50, 0.06, C.woodWarm, 0, true); // slim NE oak corner support leg
       op.addBox(5.49, 0.535, 0.575, 0.44, 0.025, 0.48, [0.16, 0.16, 0.18, 1.0], 0, false); // acoustic isolation pad
       // Solid North wing between niche (0.85) and projector bay (2.36)
-      op.addBox(5.49, (DINING_Y + mbTopY)/2, 1.605, 0.50, 0.70, 1.51, C.woodWarm, 0, true);
+      wingTarget.addBox(5.49, (DINING_Y + mbTopY)/2, 1.605, 0.50, 0.70, 1.51, woodWing, 0, true);
     } else {
-      op.addBox(5.49, (DINING_Y + mbTopY)/2, 1.33, 0.50, 0.70, 2.06, C.woodWarm, 0, true);
+      wingTarget.addBox(5.49, (DINING_Y + mbTopY)/2, 1.33, 0.50, 0.70, 2.06, woodWing, 0, true);
     }
 
     // 2) CENTRAL WIDENED 60 cm PROJECTOR BAY + PROTECTIVE ENCLOSURE (Z = 2.36..3.02, X = 5.24..5.84)
@@ -1016,14 +1049,14 @@
     // 3) SOUTH WING (Z = 3.02..5.31)
     if (state.subMode === 'rear_bench') {
       // Solid South wing between projector bay (3.02) and South niche (4.76)
-      op.addBox(5.49, (DINING_Y + mbTopY)/2, 3.89, 0.50, 0.70, 1.74, C.woodWarm, 0, true);
+      wingTarget.addBox(5.49, (DINING_Y + mbTopY)/2, 3.89, 0.50, 0.70, 1.74, woodWing, 0, true);
       // Carved niche at South end (Z = 4.76..5.31) for SVS 2000, open toward South/SW
       op.addBox(5.49, 1.12, 5.035, 0.50, 0.20, 0.55, C.woodWarm, 0, true); // top slab
       op.addBox(5.72, 0.77, 5.035, 0.04, 0.50, 0.55, C.woodDark, 0, true); // East back panel
       op.addBox(5.70, 0.77, 5.29,  0.08, 0.50, 0.04, C.woodWarm, 0, true); // SE trim post
       op.addBox(5.48, 0.535, 5.035, 0.44, 0.025, 0.48, [0.16, 0.16, 0.18, 1.0], 0, false); // acoustic pad
     } else {
-      op.addBox(5.49, (DINING_Y + mbTopY)/2, 4.165, 0.50, 0.70, 2.29, C.woodWarm, 0, true);
+      wingTarget.addBox(5.49, (DINING_Y + mbTopY)/2, 4.165, 0.50, 0.70, 2.29, woodWing, 0, true);
     }
 
     // Round rug + round coffee table (centered at X=2.70, Z=2.67)
@@ -1241,20 +1274,27 @@
           tr.addSphere([x, CEIL_Y - 0.02, z], 0.20, [eq.colorRGB[0], eq.colorRGB[1], eq.colorRGB[2], 0.25], 8, 12, false);
         }
       } else if (eq.id === 'sr' || eq.id === 'sl') {
-        // Focal 300 ICW6 (Ø 244 mm, mounting depth 105 mm) recessed into 12 cm doublage!
-        const inward = eq.id === 'sr' ? [0, 0, 1] : [-sOut[0], 0, -sOut[2]];
-        const backPt = v3.add(eq.pos, v3.scale(inward, -0.105)); // 10.5 cm inside 12 cm doublage!
-        const frontPt = v3.add(eq.pos, v3.scale(inward, 0.016));
-        const drvPt = v3.add(eq.pos, v3.scale(inward, 0.022));
-        // Rear chassis recessed into the 12 cm doublage (visible in X-ray mode!)
-        op.addCylinder(backPt, eq.pos, 0.096, 0.108, darkBody, 18, true, true, true);
-        // Highlighted circular bezel on wall surface
-        op.addCylinder(eq.pos, frontPt, 0.126, 0.126, hiCol, 20);
-        // 6.5" Flax cone + coaxial tweeter
-        op.addCylinder(frontPt, drvPt, 0.086, 0.078, flaxCone, 16);
-        op.addCylinder(drvPt, v3.add(drvPt, v3.scale(inward, 0.010)), 0.026, 0.020, darkBody, 12);
+        // Dynamic surround model:
+        //  - walls_icw6:  Focal 300 ICW6 (Ø 244 mm, mounting depth 105 mm) in 12 cm wall doublage
+        //  - meuble_icw4: Focal 300 ICW4 (Ø 192 mm, mounting depth 93 mm) recessed into rear wooden meuble facing -X
+        const inMeuble = (state.surrMode === 'meuble_icw4');
+        const inward = inMeuble ? [-1, 0, 0] : (eq.id === 'sr' ? [0, 0, 1] : [-sOut[0], 0, -sOut[2]]);
+        const depth  = inMeuble ? 0.093 : 0.105;
+        const rBezel = inMeuble ? 0.096 : 0.122; // Ø 192 mm vs Ø 244 mm!
+        const rCan   = inMeuble ? 0.080 : 0.106; // Ø 163 mm vs Ø 216 mm cutout!
+        const rFlax  = inMeuble ? 0.056 : 0.084; // 4" (10 cm) vs 6.5" (16.5 cm) Flax cone!
+        const backPt  = v3.add(eq.pos, v3.scale(inward, -depth));
+        const frontPt = v3.add(eq.pos, v3.scale(inward, 0.015));
+        const drvPt   = v3.add(eq.pos, v3.scale(inward, 0.021));
+        // Rear chassis recessed into wall or wooden meuble (visible in X-ray mode!)
+        op.addCylinder(backPt, eq.pos, rCan * 0.90, rCan, darkBody, 18, true, true, true);
+        // Highlighted circular bezel on surface
+        op.addCylinder(eq.pos, frontPt, rBezel, rBezel, hiCol, 20);
+        // Flax woofer cone + coaxial inverted-dome tweeter
+        op.addCylinder(frontPt, drvPt, rFlax, rFlax * 0.90, flaxCone, 16);
+        op.addCylinder(drvPt, v3.add(drvPt, v3.scale(inward, 0.009)), 0.020, 0.016, darkBody, 12);
         if (isSel) {
-          tr.addSphere(eq.pos, 0.20, [eq.colorRGB[0], eq.colorRGB[1], eq.colorRGB[2], 0.26], 8, 12, false);
+          tr.addSphere(eq.pos, rBezel * 1.65, [eq.colorRGB[0], eq.colorRGB[1], eq.colorRGB[2], 0.26], 8, 12, false);
         }
       } else if (eq.id === 'proj') {
         // Sony VPL-XW6100 (460 W × 210 H × 517 D mm), lens facing -X toward screen
@@ -1277,11 +1317,16 @@
       if (state.showCones && eq.id !== 'proj' && eq.id !== 'sub') {
         const coneCol = [eq.colorRGB[0], eq.colorRGB[1], eq.colorRGB[2], isSel ? 0.26 : 0.11];
         const rayCol  = [eq.colorRGB[0], eq.colorRGB[1], eq.colorRGB[2], isSel ? 0.88 : 0.42];
-        const dir = v3.norm(v3.sub(eq.aim, eq.pos));
+        const isMeubleSurr = (state.surrMode === 'meuble_icw4' && (eq.id === 'sr' || eq.id === 'sl'));
+        const dir = isMeubleSurr
+          ? v3.norm([-0.94, 0.0, eq.id === 'sr' ? 0.34 : -0.34]) // flush -X baffle + ~20° Focal orientable tweeter
+          : v3.norm(v3.sub(eq.aim, eq.pos));
         const dist = v3.len(v3.sub(eq.aim, eq.pos));
-        const coneLen = Math.min(dist * 0.72, eq.id === 'tr' || eq.id === 'tl' ? 1.85 : 2.20);
+        const coneLen = isMeubleSurr
+          ? 1.65
+          : Math.min(dist * 0.72, eq.id === 'tr' || eq.id === 'tl' ? 1.85 : 2.20);
         const endPt = v3.add(eq.pos, v3.scale(dir, coneLen));
-        const endRad = coneLen * (eq.id === 'tr' || eq.id === 'tl' ? 0.42 : 0.30);
+        const endRad = coneLen * (isMeubleSurr ? 0.46 : (eq.id === 'tr' || eq.id === 'tl' ? 0.42 : 0.30));
         tr.addCylinder(eq.pos, endPt, 0.06, endRad, coneCol, 18, false, false, false, false);
         op.addEdge(eq.pos, eq.aim, rayCol);
       }
@@ -1337,9 +1382,14 @@
       op.addEdge([0.05, 1.43, 0.01], [0.05, 1.57, 0.01], [0.06, 0.65, 0.91, 0.88]);
       op.addEdge([0.05, 1.43, 0.75], [0.05, 1.57, 0.75], [0.06, 0.65, 0.91, 0.88]);
       op.addEdge([0.28, 0.0, 6.95], [0.28, state.flHeight, 6.95], [0.01, 0.52, 0.78, 0.45]);
-      // SR & SL 1.30 m height verticals (measured from séjour floor Y = 0!)
-      addHeightCote(5.11, 0.05, 1.30, [0.96, 0.25, 0.37, 0.88], 'x');
-      addHeightCote(5.11, zSouth(5.11) - 0.05, 1.30, [0.88, 0.11, 0.28, 0.88], 'x');
+      // SR & SL floor-height verticals (measured from séjour floor Y = 0!)
+      if (state.surrMode === 'meuble_icw4') {
+        addHeightCote(5.21, 1.05, 1.06, [0.96, 0.25, 0.37, 0.88], 'z');
+        addHeightCote(5.21, 4.31, 1.06, [0.88, 0.11, 0.28, 0.88], 'z');
+      } else {
+        addHeightCote(5.11, 0.05, 1.30, [0.96, 0.25, 0.37, 0.88], 'x');
+        addHeightCote(5.11, zSouth(5.11) - 0.05, 1.30, [0.88, 0.11, 0.28, 0.88], 'x');
+      }
       // Step height 52 cm marker
       op.addEdge([5.24, 0.0, 6.00], [5.24, DINING_Y, 6.00], dimCol);
     }
@@ -1685,7 +1735,15 @@
       }
     }
     for (const dm of dimEls) {
-      const p = projectPoint(dm.pos, mvp, w, h);
+      let pos = dm.pos;
+      let txt = dm.text;
+      if (dm.id === 'd_h_sr') {
+        if (state.surrMode === 'meuble_icw4') { pos = [5.14, 0.72, 1.05]; txt = '↕ 1,06 m'; }
+      } else if (dm.id === 'd_h_sl') {
+        if (state.surrMode === 'meuble_icw4') { pos = [5.14, 0.72, 4.31]; txt = '↕ 1,06 m'; }
+      }
+      if (dm.el.textContent !== txt) dm.el.textContent = txt;
+      const p = projectPoint(pos, mvp, w, h);
       if (!p || p.x < 0 || p.x > w || p.y < 0 || p.y > h) {
         dm.el.style.display = 'none';
       } else {
@@ -1791,8 +1849,14 @@
     if (eq.id === 'centrale') { yaw = 1.45; pitch = 0.14; dist = 3.2; }
     else if (eq.id === 'fr')  { yaw = 0.90; pitch = 0.18; dist = 3.0; }
     else if (eq.id === 'fl')  { yaw = 2.15; pitch = 0.18; dist = 3.0; }
-    else if (eq.id === 'sr')  { yaw = 0.70; pitch = 0.16; dist = 2.6; }
-    else if (eq.id === 'sl')  { yaw = 2.45; pitch = 0.16; dist = 2.8; }
+    else if (eq.id === 'sr')  {
+      if (state.surrMode === 'meuble_icw4') { yaw = -1.35; pitch = 0.22; dist = 2.6; }
+      else { yaw = 0.70; pitch = 0.16; dist = 2.6; }
+    }
+    else if (eq.id === 'sl')  {
+      if (state.surrMode === 'meuble_icw4') { yaw = -1.78; pitch = 0.22; dist = 2.6; }
+      else { yaw = 2.45; pitch = 0.16; dist = 2.8; }
+    }
     else if (eq.id === 'tr' || eq.id === 'tl') { yaw = 0.72; pitch = 0.42; dist = 4.4; }
     else if (eq.id === 'sub') {
       if (state.subMode === 'rear_bench_north') { yaw = 1.42; pitch = 0.28; dist = 1.85; }
@@ -1871,7 +1935,8 @@
         document.getElementById('opt-cutsouth').checked = wantCutSouth;
         needRebuild = true;
       }
-      // Auto-enable X-ray when clicking "Surrounds 12 cm" to inspect 10.5cm speaker in 12cm wall!
+      // Auto-enable X-ray when clicking "Surrounds 12 cm" to inspect speaker depth inside wall/meuble!
+      let camDst = PRESETS[key];
       if (key === 'surrounds') {
         if (!state.xray) {
           state.xray = true;
@@ -1882,9 +1947,12 @@
         renderEquipmentList();
         updateInspector();
         needRebuild = true;
+        if (state.surrMode === 'meuble_icw4') {
+          camDst = { yaw: -1.12, pitch: 0.27, dist: 4.35, target: [5.30, 1.06, 2.68] };
+        }
       }
       if (needRebuild) rebuildGeometry();
-      animateCameraTo(PRESETS[key], 550);
+      animateCameraTo(camDst, 550);
     });
   });
 
@@ -1926,6 +1994,27 @@
     selectEquipment('sub', true);
   });
 
+  document.getElementById('sel-surr-pos').addEventListener('change', (e) => {
+    state.surrMode = e.target.value;
+    const isMeuble = (state.surrMode === 'meuble_icw4');
+    const sumEl = document.getElementById('summary-surr');
+    if (sumEl) {
+      sumEl.textContent = isMeuble
+        ? '300 ICW4 (Ø 19 cm) · meuble'
+        : '300 ICW6 · mur 12 cm';
+    }
+    const surrBtn = document.querySelector('button[data-preset="surrounds"]');
+    if (surrBtn) {
+      surrBtn.textContent = isMeuble ? 'Surrounds meuble' : 'Surrounds 12 cm';
+    }
+    selectEquipment('sr', false);
+    if (isMeuble) {
+      animateCameraTo({ yaw: -1.42, pitch: 0.25, dist: 4.40, target: [5.26, 1.06, 2.68] }, 520);
+    } else {
+      focusOnEquipment(getEquipmentList().find((eq) => eq.id === 'sr'));
+    }
+  });
+
   document.getElementById('rng-fl-height').addEventListener('input', (e) => {
     state.flHeight = parseFloat(e.target.value);
     const dropCm = Math.round((CEIL_Y - state.flHeight) * 100);
@@ -1945,7 +2034,7 @@
   document.getElementById('btn-export-obj').addEventListener('click', exportOBJ);
 
   const sidebarEl = document.getElementById('sidebar');
-    const themeBtn = document.getElementById('btn-theme-toggle');
+  const themeBtn = document.getElementById('btn-theme-toggle');
   if (themeBtn) {
     themeBtn.addEventListener('click', () => {
       const nowLight = document.documentElement.classList.toggle('light');
@@ -1956,7 +2045,6 @@
   if (window.innerWidth < 768) {
     sidebarEl.classList.add('hidden');
   }
-
   document.getElementById('btn-toggle-sidebar').addEventListener('click', () => {
     sidebarEl.classList.toggle('hidden');
   });
